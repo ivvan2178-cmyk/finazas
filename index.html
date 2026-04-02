@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Mis Finanzas — Control Personal de Finanzas</title>
+  <meta name="description" content="Aplicación web de control de finanzas personales. Registra ingresos, gastos, transferencias y controla tus pagos a plazos mes a mes." />
+
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+
+  <!-- Font Awesome -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+
+  <!-- Supabase -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+
+  <!-- App CSS -->
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+
+<!-- Pantalla de carga -->
+<div id="app-loading">
+  <div class="loading-inner">
+    <div class="loading-spinner"></div>
+    <p>Conectando con la base de datos…</p>
+  </div>
+</div>
+
+<!-- Login Screen -->
+<div id="login-screen" style="display:none">
+  <div class="login-card">
+    <div class="login-brand">
+      <div class="brand-icon"><i class="fas fa-chart-pie"></i></div>
+      <div>
+        <div class="brand-name">Mis Finanzas</div>
+        <div class="brand-sub">Control Personal</div>
+      </div>
+    </div>
+    <h2 id="auth-heading" class="login-heading">Iniciar sesión</h2>
+    <div class="form-group">
+      <label>Correo electrónico</label>
+      <input id="auth-email" type="email" class="form-input" placeholder="tu@correo.com" autocomplete="email" />
+    </div>
+    <div class="form-group">
+      <label>Contraseña</label>
+      <input id="auth-password" type="password" class="form-input" placeholder="Mínimo 6 caracteres" autocomplete="current-password" />
+    </div>
+    <div id="auth-error"   class="auth-msg auth-error"   style="display:none"></div>
+    <div id="auth-success" class="auth-msg auth-success" style="display:none"></div>
+    <button id="auth-submit-btn" class="btn btn-primary" style="width:100%;margin-top:.5rem">
+      <i class="fas fa-right-to-bracket"></i> Entrar
+    </button>
+    <button id="auth-toggle-btn" class="auth-toggle">
+      ¿No tienes cuenta? <strong>Crear cuenta</strong>
+    </button>
+  </div>
+</div>
+
+<!-- Toast notifications -->
+<div id="toast-container"></div>
+
+<!-- Sidebar toggle (mobile) -->
+<button id="sidebar-toggle" aria-label="Abrir menú">
+  <i class="fas fa-bars"></i>
+</button>
+
+<!-- ════════════════════════════════
+     App Layout
+═══════════════════════════════════ -->
+<div id="app" style="display:none">
+
+  <!-- ── Sidebar ── -->
+  <aside id="sidebar" role="navigation" aria-label="Menú principal">
+    <div class="sidebar-brand">
+      <div class="brand-icon"><i class="fas fa-chart-pie"></i></div>
+      <div>
+        <div class="brand-name">Mis Finanzas</div>
+        <div class="brand-sub">Control Personal</div>
+      </div>
+      <!-- Indicador de sincronización -->
+      <div id="sync-indicator" title="Guardando…" style="display:none;align-items:center;gap:.3rem;margin-left:auto;font-size:.62rem;color:var(--text-dim)">
+        <span class="sync-dot"></span>
+      </div>
+    </div>
+
+    <div class="sidebar-user">
+      <i class="fas fa-circle-user"></i>
+      <span id="sidebar-user-email" class="sidebar-user-email">—</span>
+      <button class="btn-icon" onclick="App.signOut()" title="Cerrar sesión" style="margin-left:auto">
+        <i class="fas fa-right-from-bracket"></i>
+      </button>
+    </div>
+
+    <nav>
+      <div class="nav-section">Principal</div>
+
+      <a href="#" class="nav-link" data-section="dashboard">
+        <i class="fas fa-gauge-high"></i>
+        <span>Dashboard</span>
+      </a>
+      <a href="#" class="nav-link" data-section="accounts">
+        <i class="fas fa-wallet"></i>
+        <span>Cuentas</span>
+      </a>
+      <a href="#" class="nav-link" data-section="transactions">
+        <i class="fas fa-receipt"></i>
+        <span>Movimientos</span>
+      </a>
+      <a href="#" class="nav-link" data-section="loans">
+        <i class="fas fa-handshake"></i>
+        <span>Préstamos</span>
+      </a>
+      <a href="#" class="nav-link" data-section="budget">
+        <i class="fas fa-bullseye"></i>
+        <span>Presupuesto</span>
+      </a>
+
+      <div class="nav-section" style="margin-top:.75rem">Tarjetas</div>
+
+      <a href="#" class="nav-link" data-section="credit">
+        <i class="fas fa-credit-card"></i>
+        <span>Estado de Cuenta</span>
+      </a>
+      <a href="#" class="nav-link" data-section="installments">
+        <i class="fas fa-calendar-check"></i>
+        <span>Plazos / MSI</span>
+      </a>
+
+      <div class="nav-section" style="margin-top:.75rem">Datos</div>
+
+      <a href="#" class="nav-link" data-section="export">
+        <i class="fas fa-database"></i>
+        <span>Exportar / Importar</span>
+      </a>
+      <a href="#" class="nav-link" data-section="settings">
+        <i class="fas fa-tags"></i>
+        <span>Categorías</span>
+      </a>
+    </nav>
+  </aside>
+
+  <!-- ── Main Content ── -->
+  <main id="main-content">
+
+    <!-- ══════════════ DASHBOARD ══════════════ -->
+    <section id="section-dashboard" class="section">
+      <div class="section-header">
+        <div>
+          <h1 class="section-title">Dashboard</h1>
+          <p style="color:var(--text-muted);font-size:.85rem;margin-top:.2rem" id="db-month-label"></p>
+        </div>
+        <button class="btn btn-primary" onclick="Transactions.openAddModal('expense')">
+          <i class="fas fa-plus"></i> Nuevo movimiento
+        </button>
+      </div>
+
+      <!-- Stat cards -->
+      <div class="stats-grid">
+        <div class="stat-card" style="--accent-color:var(--green)">
+          <div class="stat-label"><i class="fas fa-coins"></i> Activos totales</div>
+          <div class="stat-value text-success" id="db-assets">$0.00</div>
+        </div>
+        <div class="stat-card" style="--accent-color:var(--red)">
+          <div class="stat-label"><i class="fas fa-credit-card"></i> Deuda total</div>
+          <div class="stat-value text-danger" id="db-debt">$0.00</div>
+        </div>
+        <div class="stat-card" style="--accent-color:var(--purple)">
+          <div class="stat-label"><i class="fas fa-scale-balanced"></i> Patrimonio neto</div>
+          <div class="stat-value" id="db-net">$0.00</div>
+        </div>
+        <div class="stat-card" style="--accent-color:var(--orange)">
+          <div class="stat-label"><i class="fas fa-handshake"></i> Por cobrar</div>
+          <div class="stat-value text-warning" id="db-due">$0.00</div>
+        </div>
+      </div>
+
+      <!-- Month stats -->
+      <div class="stats-grid" style="margin-bottom:1.5rem">
+        <div class="stat-card" style="--accent-color:var(--green)">
+          <div class="stat-label"><i class="fas fa-arrow-down"></i> Ingresos del mes</div>
+          <div class="stat-value text-success" id="db-income">$0.00</div>
+        </div>
+        <div class="stat-card" style="--accent-color:var(--red)">
+          <div class="stat-label"><i class="fas fa-arrow-up"></i> Gastos del mes</div>
+          <div class="stat-value text-danger" id="db-expense">$0.00</div>
+        </div>
+        <div class="stat-card" style="--accent-color:var(--blue)">
+          <div class="stat-label"><i class="fas fa-arrow-trend-up"></i> Balance del mes</div>
+          <div class="stat-value" id="db-balance">$0.00</div>
+        </div>
+      </div>
+
+      <!-- Charts + lists -->
+      <div class="dashboard-grid">
+        <div class="dashboard-card">
+          <div class="dashboard-card-title"><i class="fas fa-chart-pie"></i> Gastos por categoría</div>
+          <div class="chart-wrap"><canvas id="chart-donut"></canvas></div>
+        </div>
+
+        <div class="dashboard-card">
+          <div class="dashboard-card-title"><i class="fas fa-calendar-check"></i> Plazos activos este mes</div>
+          <div id="db-upcoming"></div>
+        </div>
+
+        <div class="dashboard-card">
+          <div class="dashboard-card-title"><i class="fas fa-bullseye"></i> Alertas de presupuesto
+            <a href="#" onclick="App.navigate('budget')" style="margin-left:auto;font-size:.75rem;color:var(--purple-lt)">Ver todo →</a>
+          </div>
+          <div id="db-budget-alerts"></div>
+        </div>
+
+        <div class="dashboard-card span-2">
+          <div class="dashboard-card-title"><i class="fas fa-chart-bar"></i> Ingresos vs Gastos — Últimos 6 meses</div>
+          <div class="chart-wrap"><canvas id="chart-bar"></canvas></div>
+        </div>
+
+        <div class="dashboard-card span-2">
+          <div class="dashboard-card-title">
+            <i class="fas fa-clock-rotate-left"></i> Movimientos recientes
+            <a href="#" onclick="App.navigate('transactions')" style="margin-left:auto;font-size:.75rem;color:var(--purple-lt)">Ver todos →</a>
+          </div>
+          <div id="db-recent"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ══════════════ CUENTAS ══════════════ -->
+    <section id="section-accounts" class="section">
+      <div class="section-header">
+        <h1 class="section-title">Cuentas</h1>
+        <button class="btn btn-primary" onclick="Accounts.openAddModal()">
+          <i class="fas fa-plus"></i> Nueva cuenta
+        </button>
+      </div>
+      <div class="accounts-grid" id="accounts-grid"></div>
+    </section>
+
+    <!-- ══════════════ MOVIMIENTOS ══════════════ -->
+    <section id="section-transactions" class="section">
+      <div class="section-header">
+        <h1 class="section-title">Movimientos</h1>
+        <div style="display:flex;gap:.6rem">
+          <button class="btn btn-ghost" onclick="Transactions.openAddModal('income')">
+            <i class="fas fa-arrow-down" style="color:var(--green)"></i> Ingreso
+          </button>
+          <button class="btn btn-ghost" onclick="Transactions.openAddModal('transfer')">
+            <i class="fas fa-arrows-left-right" style="color:var(--blue)"></i> Transferencia
+          </button>
+          <button class="btn btn-primary" onclick="Transactions.openAddModal('expense')">
+            <i class="fas fa-plus"></i> Gasto
+          </button>
+        </div>
+      </div>
+
+      <!-- Filters -->
+      <div class="tx-filters">
+        <div class="form-group">
+          <label style="font-size:.72rem">Mes</label>
+          <input id="filter-month" type="month" class="form-input" style="min-width:150px" onchange="App.applyFilters()" />
+        </div>
+        <div class="form-group">
+          <label style="font-size:.72rem">Tipo</label>
+          <select id="filter-type" class="form-input" onchange="App.applyFilters()">
+            <option value="all">Todos</option>
+            <option value="income">Ingresos</option>
+            <option value="expense">Gastos</option>
+            <option value="transfer">Transferencias</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label style="font-size:.72rem">Cuenta</label>
+          <select id="filter-account" class="form-input" onchange="App.applyFilters()"></select>
+        </div>
+        <div class="form-group">
+          <label style="font-size:.72rem">Categoría</label>
+          <select id="filter-category" class="form-input" onchange="App.applyFilters()"></select>
+        </div>
+        <div class="form-group" style="grid-column:auto">
+          <label style="font-size:.72rem">Buscar</label>
+          <input id="filter-search" type="text" class="form-input" placeholder="Descripción o nota..." oninput="App.applyFilters()" style="min-width:160px" />
+        </div>
+        <div class="form-group" style="justify-content:flex-end;align-self:flex-end">
+          <button class="btn btn-ghost btn-sm" onclick="App.clearFilters()"><i class="fas fa-xmark"></i> Limpiar</button>
+        </div>
+      </div>
+
+      <!-- Summary pills -->
+      <div class="tx-summary" id="tx-summary"></div>
+
+      <!-- List -->
+      <div id="transactions-list"></div>
+    </section>
+
+    <!-- ══════════════ ESTADO DE CUENTA ══════════════ -->
+    <section id="section-credit" class="section">
+      <div class="section-header">
+        <h1 class="section-title">Estado de Cuenta</h1>
+        <button class="btn btn-primary" onclick="Installments.openAddModal()">
+          <i class="fas fa-plus"></i> Nuevo plazo MSI
+        </button>
+      </div>
+
+      <div class="credit-controls">
+        <div class="form-group">
+          <label style="font-size:.72rem">Tarjeta</label>
+          <select id="credit-account-select" class="form-input" onchange="Installments.renderCreditStatement()"></select>
+        </div>
+        <div class="form-group">
+          <label style="font-size:.72rem">Mes</label>
+          <select id="credit-month-select" class="form-input" onchange="Installments.renderCreditStatement()"></select>
+        </div>
+      </div>
+
+      <div id="credit-statement"></div>
+    </section>
+
+    <!-- ══════════════ PLAZOS / MSI ══════════════ -->
+    <section id="section-installments" class="section">
+      <div class="section-header">
+        <h1 class="section-title">Plazos / MSI</h1>
+        <button class="btn btn-primary" onclick="Installments.openAddModal()">
+          <i class="fas fa-plus"></i> Registrar plazo
+        </button>
+      </div>
+      <div id="installments-list"></div>
+    </section>
+
+    <!-- ══════════════ PRÉSTAMOS ══════════════ -->
+    <section id="section-loans" class="section">
+      <div class="section-header">
+        <h1 class="section-title">Préstamos</h1>
+        <button class="btn btn-primary" onclick="Loans.openAddModal()">
+          <i class="fas fa-plus"></i> Nuevo préstamo
+        </button>
+      </div>
+      <div id="loans-content"></div>
+    </section>
+
+    <!-- ══════════════ PRESUPUESTO ══════════════ -->
+    <section id="section-budget" class="section">
+      <div class="section-header">
+        <h1 class="section-title">Presupuesto</h1>
+        <button class="btn btn-primary" onclick="Budget.openConfigModal()">
+          <i class="fas fa-sliders"></i> Configurar límites
+        </button>
+      </div>
+      <div id="budget-content"></div>
+    </section>
+
+    <!-- ══════════════ EXPORTAR / IMPORTAR ══════════════ -->
+    <section id="section-export" class="section">
+      <div class="section-header">
+        <h1 class="section-title">Exportar / Importar</h1>
+      </div>
+
+      <div class="export-stats" id="export-stats"></div>
+
+      <div class="export-grid">
+        <!-- Export -->
+        <div class="export-card">
+          <div class="export-icon green"><i class="fas fa-file-csv"></i></div>
+          <h3>Exportar a CSV</h3>
+          <p>Descarga todos tus movimientos en formato CSV compatible con Excel o Google Sheets.</p>
+          <button class="btn btn-primary" onclick="App.exportCSV()" style="width:100%">
+            <i class="fas fa-download"></i> Descargar CSV
+          </button>
+        </div>
+
+        <!-- Import -->
+        <div class="export-card">
+          <div class="export-icon blue"><i class="fas fa-file-import"></i></div>
+          <h3>Importar desde CSV</h3>
+          <p>Carga movimientos desde un archivo CSV exportado por esta app. Las cuentas deben coincidir por nombre.</p>
+          <input type="file" id="csv-import-input" accept=".csv" style="display:none"
+            onchange="App.handleImport(this)" />
+          <button class="btn btn-ghost" onclick="App.triggerImport()" style="width:100%;border-color:var(--blue);color:var(--blue)">
+            <i class="fas fa-upload"></i> Seleccionar archivo CSV
+          </button>
+        </div>
+      </div>
+
+      <!-- Format reference -->
+      <div style="margin-top:2rem;background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:1.5rem">
+        <h3 style="font-size:.9rem;font-weight:700;color:var(--white);margin-bottom:.75rem">
+          <i class="fas fa-circle-info" style="color:var(--blue)"></i> Formato del CSV
+        </h3>
+        <p style="font-size:.82rem;color:var(--text-muted);margin-bottom:.75rem">
+          El archivo CSV debe tener las siguientes columnas en este orden:
+        </p>
+        <div style="overflow-x:auto">
+          <table style="width:100%;border-collapse:collapse;font-size:.78rem">
+            <thead>
+              <tr style="border-bottom:1px solid var(--border2)">
+                <th style="text-align:left;padding:.5rem .75rem;color:var(--text-muted)">Columna</th>
+                <th style="text-align:left;padding:.5rem .75rem;color:var(--text-muted)">Valores posibles</th>
+                <th style="text-align:left;padding:.5rem .75rem;color:var(--text-muted)">Ejemplo</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr style="border-bottom:1px solid var(--border)"><td style="padding:.5rem .75rem">Fecha</td><td style="padding:.5rem .75rem;color:var(--text-muted)">YYYY-MM-DD</td><td style="padding:.5rem .75rem;color:var(--purple-lt)">2026-03-29</td></tr>
+              <tr style="border-bottom:1px solid var(--border)"><td style="padding:.5rem .75rem">Tipo</td><td style="padding:.5rem .75rem;color:var(--text-muted)">Ingreso, Gasto, Transferencia</td><td style="padding:.5rem .75rem;color:var(--purple-lt)">Gasto</td></tr>
+              <tr style="border-bottom:1px solid var(--border)"><td style="padding:.5rem .75rem">Categoría</td><td style="padding:.5rem .75rem;color:var(--text-muted)">Ver categorías de la app</td><td style="padding:.5rem .75rem;color:var(--purple-lt)">Comida / Restaurante</td></tr>
+              <tr style="border-bottom:1px solid var(--border)"><td style="padding:.5rem .75rem">Descripción</td><td style="padding:.5rem .75rem;color:var(--text-muted)">Texto libre</td><td style="padding:.5rem .75rem;color:var(--purple-lt)">Super Walmart</td></tr>
+              <tr style="border-bottom:1px solid var(--border)"><td style="padding:.5rem .75rem">Nota</td><td style="padding:.5rem .75rem;color:var(--text-muted)">Texto libre (opcional)</td><td style="padding:.5rem .75rem;color:var(--purple-lt)">Con cupón</td></tr>
+              <tr style="border-bottom:1px solid var(--border)"><td style="padding:.5rem .75rem">Monto (MXN)</td><td style="padding:.5rem .75rem;color:var(--text-muted)">Número positivo</td><td style="padding:.5rem .75rem;color:var(--purple-lt)">1250.50</td></tr>
+              <tr style="border-bottom:1px solid var(--border)"><td style="padding:.5rem .75rem">Cuenta</td><td style="padding:.5rem .75rem;color:var(--text-muted)">Nombre exacto de la cuenta</td><td style="padding:.5rem .75rem;color:var(--purple-lt)">BBVA Nómina</td></tr>
+              <tr><td style="padding:.5rem .75rem">Cuenta Destino</td><td style="padding:.5rem .75rem;color:var(--text-muted)">Solo para transferencias</td><td style="padding:.5rem .75rem;color:var(--purple-lt)">Ahorro BBVA</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ══════════════ CATEGORÍAS (CONFIGURACIÓN) ══════════════ -->
+    <section id="section-settings" class="section">
+      <div class="section-header">
+        <h1 class="section-title">Categorías</h1>
+      </div>
+      <div id="settings-content"></div>
+    </section>
+
+  </main>
+</div>
+
+<!-- ══════════════ MODAL ══════════════ -->
+<div id="modal-overlay" class="modal-overlay hidden" role="dialog" aria-modal="true">
+  <div class="modal">
+    <div class="modal-header">
+      <h2 id="modal-title">Modal</h2>
+      <button class="modal-close" onclick="App.closeModal()" aria-label="Cerrar">
+        <i class="fas fa-xmark"></i>
+      </button>
+    </div>
+    <div class="modal-body" id="modal-body"></div>
+  </div>
+</div>
+
+<!-- ══════════════ Scripts ══════════════ -->
+<script src="js/config.js"></script>
+<script src="js/storage.js"></script>
+<script src="js/charts.js"></script>
+<script src="js/accounts.js"></script>
+<script src="js/transactions.js"></script>
+<script src="js/installments.js"></script>
+<script src="js/loans.js"></script>
+<script src="js/budget.js"></script>
+<script src="js/categories.js"></script>
+<script src="js/app.js"></script>
+
+<!-- Dashboard month label -->
+<script>
+  document.addEventListener('DOMContentLoaded', () => {
+    const el = document.getElementById('db-month-label');
+    if (el) el.textContent = Storage.formatMonth(Storage.getCurrentMonth());
+  });
+</script>
+
+</body>
+</html>
