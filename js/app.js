@@ -10,21 +10,25 @@ const App = (() => {
   async function init() {
     Storage.setup(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-    // onAuthStateChange dispara con INITIAL_SESSION al cargar la página
-    // y con SIGNED_IN / SIGNED_OUT en cambios posteriores
-    Storage.onAuthStateChange(async (event, session) => {
-      const loadingEl = document.getElementById('app-loading');
+    // Escuchar cambios posteriores (login / logout)
+    Storage.onAuthStateChange(async (event) => {
+      if (event === 'SIGNED_IN')  await _bootApp();
+      if (event === 'SIGNED_OUT') { document.getElementById('app-loading').style.display = 'none'; _showLogin(); }
+    });
 
-      if (session) {
-        // Hay sesión activa → cargar app
-        document.getElementById('login-screen').style.display = 'none';
+    // Verificar sesión actual directamente (no depende del lock)
+    try {
+      const user = await Storage.getUser();
+      if (user) {
         await _bootApp();
-      } else if (event === 'INITIAL_SESSION' || event === 'SIGNED_OUT') {
-        // Sin sesión → mostrar login
-        if (loadingEl) loadingEl.style.display = 'none';
+      } else {
+        document.getElementById('app-loading').style.display = 'none';
         _showLogin();
       }
-    });
+    } catch {
+      document.getElementById('app-loading').style.display = 'none';
+      _showLogin();
+    }
   }
 
   /* ─── Boot (carga datos y muestra la app) ─── */
