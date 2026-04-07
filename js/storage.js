@@ -47,7 +47,6 @@ const Storage = (() => {
       setTimeout(() => reject(new Error('loadAll timeout: Supabase no respondió en 15s')), 15000)
     );
 
-    console.log('[Storage] loadAll: iniciando queries...');
     const results = await Promise.race([
       Promise.all([
         _db.from('accounts').select('*'),
@@ -58,7 +57,6 @@ const Storage = (() => {
       ]),
       _timeout
     ]);
-    console.log('[Storage] loadAll: queries completadas');
 
     const [
       { data: accounts,     error: e1 },

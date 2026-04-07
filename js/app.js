@@ -8,12 +8,8 @@ const App = (() => {
 
   /* ─── Init ─── */
   async function init() {
-    console.log('[App] init() start');
-    console.log('[App] window.supabase:', typeof window.supabase);
-
     try {
       Storage.setup(SUPABASE_URL, SUPABASE_ANON_KEY);
-      console.log('[App] Storage.setup() OK');
     } catch(e) {
       console.error('[App] Storage.setup() ERROR:', e);
       document.getElementById('app-loading').style.display = 'none';
@@ -23,14 +19,12 @@ const App = (() => {
 
     // Fallback: si onAuthStateChange no responde en 10s, mostrar login
     const _authTimeout = setTimeout(() => {
-      console.warn('[App] Auth timeout — mostrando login');
       document.getElementById('app-loading').style.display = 'none';
       _showLogin();
     }, 10000);
 
     // onAuthStateChange en v2 dispara INITIAL_SESSION al cargar la página
     Storage.onAuthStateChange(async (event, session) => {
-      console.log('[App] onAuthStateChange event:', event, 'session:', !!session);
       clearTimeout(_authTimeout);
       if (event === 'INITIAL_SESSION' || event === 'SIGNED_IN') {
         if (session) {
@@ -45,7 +39,6 @@ const App = (() => {
         _showLogin();
       }
     });
-    console.log('[App] onAuthStateChange registered — waiting...');
   }
 
   /* ─── Boot (carga datos y muestra la app) ─── */
@@ -61,14 +54,11 @@ const App = (() => {
     loadingEl.style.display = 'flex';
 
     try {
-      console.log('[App] _bootApp: llamando loadAll()...');
       await Storage.loadAll();
-      console.log('[App] _bootApp: loadAll() OK');
       if (!localStorage.getItem('fz_migrated_v2')) {
         const count = await Storage.migrateFromLocalStorage();
         if (count > 0) console.info(`[Migration] ${count} registros migrados`);
       }
-      console.log('[App] _bootApp: datos listos, mostrando app');
     } catch (err) {
       console.error('[App] Error al cargar datos:', err);
       // Si es error de autenticación, limpiar sesión y mostrar login
