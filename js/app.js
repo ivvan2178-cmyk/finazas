@@ -8,7 +8,18 @@ const App = (() => {
 
   /* ─── Init ─── */
   async function init() {
-    Storage.setup(SUPABASE_URL, SUPABASE_ANON_KEY);
+    console.log('[App] init() start');
+    console.log('[App] window.supabase:', typeof window.supabase);
+
+    try {
+      Storage.setup(SUPABASE_URL, SUPABASE_ANON_KEY);
+      console.log('[App] Storage.setup() OK');
+    } catch(e) {
+      console.error('[App] Storage.setup() ERROR:', e);
+      document.getElementById('app-loading').style.display = 'none';
+      _showLogin();
+      return;
+    }
 
     // Fallback: si onAuthStateChange no responde en 10s, mostrar login
     const _authTimeout = setTimeout(() => {
@@ -18,9 +29,8 @@ const App = (() => {
     }, 10000);
 
     // onAuthStateChange en v2 dispara INITIAL_SESSION al cargar la página
-    // con la sesión actual (o null si no hay sesión). SIGNED_IN solo se dispara
-    // cuando el usuario hace login manualmente.
     Storage.onAuthStateChange(async (event, session) => {
+      console.log('[App] onAuthStateChange event:', event, 'session:', !!session);
       clearTimeout(_authTimeout);
       if (event === 'INITIAL_SESSION' || event === 'SIGNED_IN') {
         if (session) {
@@ -35,6 +45,7 @@ const App = (() => {
         _showLogin();
       }
     });
+    console.log('[App] onAuthStateChange registered — waiting...');
   }
 
   /* ─── Boot (carga datos y muestra la app) ─── */
