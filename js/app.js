@@ -61,11 +61,14 @@ const App = (() => {
     loadingEl.style.display = 'flex';
 
     try {
+      console.log('[App] _bootApp: llamando loadAll()...');
       await Storage.loadAll();
+      console.log('[App] _bootApp: loadAll() OK');
       if (!localStorage.getItem('fz_migrated_v2')) {
         const count = await Storage.migrateFromLocalStorage();
         if (count > 0) console.info(`[Migration] ${count} registros migrados`);
       }
+      console.log('[App] _bootApp: datos listos, mostrando app');
     } catch (err) {
       console.error('[App] Error al cargar datos:', err);
       // Si es error de autenticación, limpiar sesión y mostrar login

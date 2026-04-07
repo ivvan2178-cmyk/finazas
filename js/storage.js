@@ -43,19 +43,30 @@ const Storage = (() => {
 
   /** Carga todos los datos desde Supabase al caché. Async. */
   async function loadAll() {
+    const _timeout = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('loadAll timeout: Supabase no respondió en 15s')), 15000)
+    );
+
+    console.log('[Storage] loadAll: iniciando queries...');
+    const results = await Promise.race([
+      Promise.all([
+        _db.from('accounts').select('*'),
+        _db.from('transactions').select('*'),
+        _db.from('installments').select('*'),
+        _db.from('loans').select('*'),
+        _db.from('settings').select('*')
+      ]),
+      _timeout
+    ]);
+    console.log('[Storage] loadAll: queries completadas');
+
     const [
       { data: accounts,     error: e1 },
       { data: transactions, error: e2 },
       { data: installments, error: e3 },
       { data: loans,        error: e4 },
       { data: settingsRows, error: e5 }
-    ] = await Promise.all([
-      _db.from('accounts').select('*'),
-      _db.from('transactions').select('*'),
-      _db.from('installments').select('*'),
-      _db.from('loans').select('*'),
-      _db.from('settings').select('*')
-    ]);
+    ] = results;
 
     const authError = [e1, e2, e3, e4, e5].find(e => e && (e.status === 401 || e.message?.includes('JWT') || e.message?.includes('not authorized')));
     if (authError) throw authError;
