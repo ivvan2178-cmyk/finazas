@@ -10,25 +10,31 @@ const App = (() => {
   async function init() {
     Storage.setup(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-    // Escuchar cambios posteriores (login / logout)
-    Storage.onAuthStateChange(async (event) => {
-      if (event === 'SIGNED_IN')  await _bootApp();
-      if (event === 'SIGNED_OUT') { document.getElementById('app-loading').style.display = 'none'; _showLogin(); }
-    });
+    // Fallback: si onAuthStateChange no responde en 10s, mostrar login
+    const _authTimeout = setTimeout(() => {
+      console.warn('[App] Auth timeout — mostrando login');
+      document.getElementById('app-loading').style.display = 'none';
+      _showLogin();
+    }, 10000);
 
-    // Verificar sesión actual directamente (no depende del lock)
-    try {
-      const user = await Storage.getUser();
-      if (user) {
-        await _bootApp();
-      } else {
+    // onAuthStateChange en v2 dispara INITIAL_SESSION al cargar la página
+    // con la sesión actual (o null si no hay sesión). SIGNED_IN solo se dispara
+    // cuando el usuario hace login manualmente.
+    Storage.onAuthStateChange(async (event, session) => {
+      clearTimeout(_authTimeout);
+      if (event === 'INITIAL_SESSION' || event === 'SIGNED_IN') {
+        if (session) {
+          await _bootApp();
+        } else {
+          document.getElementById('app-loading').style.display = 'none';
+          _showLogin();
+        }
+      }
+      if (event === 'SIGNED_OUT') {
         document.getElementById('app-loading').style.display = 'none';
         _showLogin();
       }
-    } catch {
-      document.getElementById('app-loading').style.display = 'none';
-      _showLogin();
-    }
+    });
   }
 
   /* ─── Boot (carga datos y muestra la app) ─── */
