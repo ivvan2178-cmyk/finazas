@@ -63,15 +63,21 @@ const Categories = (() => {
         <p>Solo puedes eliminar categorías que no tengan movimientos registrados. Las categorías se usan en Movimientos y Presupuesto.</p>
       </div>
     `;
+
+    // Event delegation para botones de eliminar (evita XSS via onclick)
+    container.querySelectorAll('.cat-delete').forEach(btn => {
+      btn.addEventListener('click', () => deleteCategory(btn.dataset.type, btn.dataset.name));
+    });
   }
 
   function _catChip(name, type, idx) {
-    // Escape for use in onclick attribute
-    const safe = name.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
     return `
       <div class="cat-chip" id="cat-chip-${type}-${idx}">
         <span class="cat-chip-text">${_esc(name)}</span>
-        <button class="cat-delete" onclick="Categories.deleteCategory('${type}','${safe}')" title="Eliminar categoría">
+        <button class="cat-delete"
+          data-type="${_esc(type)}"
+          data-name="${_esc(name)}"
+          title="Eliminar categoría">
           <i class="fas fa-xmark"></i>
         </button>
       </div>`;
