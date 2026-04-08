@@ -71,10 +71,11 @@ const Storage = (() => {
     // Errores no-auth: loguear pero no bloquear la carga (ej. schema cache desactualizado)
     [e1, e2, e3, e4, e5].forEach(e => e && console.warn('[Storage] loadAll warning:', e.message));
 
-    _cache.accounts     = accounts     || [];
-    _cache.transactions = (transactions || []).map(_unpackMeta);
-    _cache.installments = (installments || []).map(_unpackMeta);
-    _cache.loans        = loans        || [];
+    _cache.accounts     = accounts || [];
+    // Derivar flags a partir de los datos originales (sin columnas extra)
+    _cache.transactions = (transactions || []).map(_deriveTxFlags);
+    _cache.installments = (installments || []).map(i => _deriveInstallmentData(i, _cache.transactions));
+    _cache.loans        = loans || [];
 
     // settings → categorías y presupuestos
     const settings = {};
@@ -204,34 +205,48 @@ const Storage = (() => {
   }
 
   /* ══════════════════════════════════════
-     Meta helpers — campos extra en jsonb
+     Columnas originales (schema fijo)
+     Todo lo demás se deriva al cargar.
   ══════════════════════════════════════ */
 
-  // Campos que NO son columnas nativas de la tabla y se guardan en meta jsonb
-  const _TX_META   = ['skipBudget','isDebt','isLoan','isLoanPayment','loanId','installmentId'];
-  const _INST_META = ['paidMonths','date'];
+  // Solo estas columnas existen en Supabase para transactions
+  const _TX_COLS = new Set([
+    'id','date','type','amount','accountId','toAccountId',
+    'category','description','nota','installmentId'
+  ]);
 
-  // Antes de enviar a Supabase: mueve campos extra a { meta: {...} }
-  function _packMeta(obj, metaFields) {
-    const meta = {};
-    const row  = {};
-    Object.entries(obj).forEach(([k, v]) => {
-      if (metaFields.includes(k)) {
-        if (v !== undefined && v !== null && v !== false && !(Array.isArray(v) && v.length === 0))
-          meta[k] = v;
-      } else {
-        row[k] = v;
-      }
-    });
-    row.meta = Object.keys(meta).length ? meta : null;
-    return row;
+  // Solo estas columnas existen en Supabase para installments
+  const _INST_COLS = new Set([
+    'id','description','totalAmount','months','monthlyAmount',
+    'accountId','startMonth','nota','archived'
+  ]);
+
+  // Elimina campos no reconocidos por Supabase antes de guardar
+  function _packTx(t)   { const r = {}; _TX_COLS.forEach(k => { if (t[k] !== undefined) r[k] = t[k]; }); return r; }
+  function _packInst(i) { const r = {}; _INST_COLS.forEach(k => { if (i[k] !== undefined) r[k] = i[k]; }); return r; }
+
+  // Deriva flags de transacción a partir de campos originales
+  function _deriveTxFlags(t) {
+    const isDebt        = !!(t.installmentId && t.type === 'expense' && t.category === 'Plazos / MSI');
+    const isLoan        = !!(t.category === 'Préstamos' && t.type === 'expense');
+    const isLoanPayment = !!(t.category === 'Préstamos' && t.type === 'income');
+    const isInternalAbono = !!(t.installmentId && t.type === 'income');
+    const skipBudget    = isDebt || isLoan || isLoanPayment || isInternalAbono;
+    return { ...t, isDebt, isLoan, isLoanPayment, skipBudget };
   }
 
-  // Al cargar desde Supabase: expande meta de vuelta al objeto
-  function _unpackMeta(row) {
-    if (!row) return row;
-    const { meta, ...rest } = row;
-    return meta ? { ...rest, ...meta } : rest;
+  // Deriva paidMonths y date del plazo a partir de las transacciones
+  function _deriveInstallmentData(inst, transactions) {
+    const instTxs = transactions.filter(t => t.installmentId === inst.id);
+    const initialCharge = instTxs.find(t =>
+      t.type === 'expense' && t.category === 'Plazos / MSI' && Math.abs(t.amount - inst.totalAmount) < 0.01
+    );
+    const paidMonths = instTxs
+      .filter(t => t.type === 'expense' && t !== initialCharge && t.category !== 'Plazos / MSI')
+      .map(t => (t.date || '').slice(0, 7))
+      .filter(Boolean);
+    const date = initialCharge ? initialCharge.date : (inst.startMonth + '-01');
+    return { ...inst, paidMonths, date };
   }
 
   /* ══════════════════════════════════════
@@ -245,8 +260,7 @@ const Storage = (() => {
     _save(async () => {
       if (deleted.length) await _db.from('transactions').delete().in('id', deleted);
       if (newData.length) {
-        const rows = newData.map(t => _packMeta(t, _TX_META));
-        const { error } = await _db.from('transactions').upsert(rows);
+        const { error } = await _db.from('transactions').upsert(newData.map(_packTx));
         if (error) throw error;
       }
     });
@@ -263,8 +277,7 @@ const Storage = (() => {
     _save(async () => {
       if (deleted.length) await _db.from('installments').delete().in('id', deleted);
       if (newData.length) {
-        const rows = newData.map(i => _packMeta(i, _INST_META));
-        const { error } = await _db.from('installments').upsert(rows);
+        const { error } = await _db.from('installments').upsert(newData.map(_packInst));
         if (error) throw error;
       }
     });
