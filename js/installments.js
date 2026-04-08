@@ -40,10 +40,24 @@ const Installments = (() => {
         </div>
       ` : ''}
     `;
+
+    // Event delegation
+    container.querySelectorAll('[data-pay-inst]').forEach(btn => {
+      btn.addEventListener('click', () => openPayModal(btn.dataset.payInst, btn.dataset.payMonth));
+    });
+    container.querySelectorAll('[data-schedule-inst]').forEach(btn => {
+      btn.addEventListener('click', () => openScheduleModal(btn.dataset.scheduleInst));
+    });
+    container.querySelectorAll('[data-edit-inst]').forEach(btn => {
+      btn.addEventListener('click', () => openEditModal(btn.dataset.editInst));
+    });
+    container.querySelectorAll('[data-delete-inst]').forEach(btn => {
+      btn.addEventListener('click', () => deleteInstallment(btn.dataset.deleteInst));
+    });
   }
 
   function _installmentCardHTML(inst, currentMonth) {
-    const paid = _paidMonthsCount(inst, currentMonth);
+    const paid = _paidMonthsCount(inst);
     const remaining = inst.months - paid;
     const pct = Math.min(100, Math.round((paid / inst.months) * 100));
     const account = Accounts.getById(inst.accountId);
@@ -51,6 +65,9 @@ const Installments = (() => {
     const accountColor = account ? account.color : '#7c3aed';
     const isActive = !inst.archived;
     const dueThisMonth = _amountDueInMonth(inst, currentMonth);
+    const paidMonths = inst.paidMonths || [];
+    const currentMonthPaid = paidMonths.includes(currentMonth);
+    const canPayThisMonth = isActive && dueThisMonth > 0 && !currentMonthPaid;
 
     return `
       <div class="installment-card ${inst.archived ? 'archived' : ''}">
@@ -79,7 +96,9 @@ const Installments = (() => {
         ${isActive && dueThisMonth > 0 ? `
         <div class="install-detail-row highlight">
           <span>💳 Pago este mes</span>
-          <span class="text-danger">${Storage.formatCurrency(dueThisMonth)}</span>
+          <span class="${currentMonthPaid ? 'text-success' : 'text-danger'}">
+            ${currentMonthPaid ? '<i class="fas fa-check-circle"></i> Pagado' : Storage.formatCurrency(dueThisMonth)}
+          </span>
         </div>` : ''}
 
         <div class="install-progress-section">
@@ -93,14 +112,19 @@ const Installments = (() => {
         </div>
 
         <div class="install-actions">
-          <button class="btn btn-sm btn-ghost" onclick="Installments.openScheduleModal('${inst.id}')">
+          ${canPayThisMonth ? `
+            <button class="btn btn-sm btn-primary" data-pay-inst="${inst.id}" data-pay-month="${currentMonth}">
+              <i class="fas fa-money-bill-transfer"></i> Registrar pago
+            </button>
+          ` : ''}
+          <button class="btn btn-sm btn-ghost" data-schedule-inst="${inst.id}">
             <i class="fas fa-calendar"></i> Ver calendario
           </button>
           ${!inst.archived ? `
-            <button class="btn btn-sm btn-ghost" onclick="Installments.openEditModal('${inst.id}')">
+            <button class="btn btn-sm btn-ghost" data-edit-inst="${inst.id}">
               <i class="fas fa-pen"></i>
             </button>
-            <button class="btn btn-sm btn-danger" onclick="Installments.deleteInstallment('${inst.id}')">
+            <button class="btn btn-sm btn-danger" data-delete-inst="${inst.id}">
               <i class="fas fa-trash"></i>
             </button>
           ` : ''}
@@ -108,13 +132,10 @@ const Installments = (() => {
       </div>`;
   }
 
-  function _paidMonthsCount(inst, currentMonth) {
-    // Count months from start up to (not including) next month
-    const start = inst.startMonth;
-    const [sy, sm] = start.split('-').map(Number);
-    const [cy, cm] = currentMonth.split('-').map(Number);
-    const diff = (cy - sy) * 12 + (cm - sm);
-    return Math.min(Math.max(0, diff), inst.months);
+  function _paidMonthsCount(inst) {
+    // Use explicit paidMonths array if available (new system)
+    if (inst.paidMonths) return inst.paidMonths.length;
+    return 0;
   }
 
   function _amountDueInMonth(inst, monthStr) {
@@ -280,7 +301,33 @@ const Installments = (() => {
       if (idx > -1) installments[idx] = { ...installments[idx], ...data };
     } else {
       data.id = Storage.generateId();
+      data.paidMonths = [];
       installments.push(data);
+
+      // Cargo inicial en la TC: gasto por el total, categoría "Plazos / MSI"
+      // (no cuenta en presupuesto — solo refleja la deuda adquirida)
+      const txDate = startMonth + '-01';
+      const tx = {
+        id: Storage.generateId(),
+        date: txDate,
+        type: 'expense',
+        category: 'Plazos / MSI',
+        description: description,
+        nota: nota,
+        amount: totalAmount,
+        accountId: accountId,
+        toAccountId: null,
+        installmentId: data.id,
+        skipBudget: true    // marca para excluir del presupuesto y stats del mes
+      };
+      const transactions = Storage.getTransactions();
+      transactions.push(tx);
+      // Actualizar balance de la TC
+      const accounts = Storage.getAccounts();
+      const tcAccount = accounts.find(a => a.id === accountId);
+      if (tcAccount) tcAccount.balance = (tcAccount.balance || 0) + totalAmount;
+      Storage.saveAccounts(accounts);
+      Storage.saveTransactions(transactions);
     }
 
     Storage.saveInstallments(installments);
@@ -291,9 +338,146 @@ const Installments = (() => {
   }
 
   function deleteInstallment(id) {
-    if (!confirm('¿Eliminar este plazo? No se puede deshacer.')) return;
+    if (!confirm('¿Eliminar este plazo? También se eliminará el cargo inicial en la tarjeta.')) return;
+
+    const inst = Storage.getInstallments().find(x => x.id === id);
+    if (!inst) return;
+
+    // Revertir el cargo inicial en la TC
+    const accounts = Storage.getAccounts();
+    const tcAccount = accounts.find(a => a.id === inst.accountId);
+    if (tcAccount) tcAccount.balance = Math.max(0, (tcAccount.balance || 0) - inst.totalAmount);
+    Storage.saveAccounts(accounts);
+
+    // Eliminar la transacción de cargo inicial y cualquier pago registrado
+    const txs = Storage.getTransactions().filter(t => t.installmentId !== id);
+    Storage.saveTransactions(txs);
+
     Storage.saveInstallments(Storage.getInstallments().filter(x => x.id !== id));
     App.toast('Plazo eliminado', 'success');
+    render();
+    App.renderDashboard();
+  }
+
+  /* ─── Modal: Registrar pago de mensualidad ─── */
+  function openPayModal(instId, monthStr) {
+    const inst = Storage.getInstallments().find(x => x.id === instId);
+    if (!inst) return;
+
+    const [iy, im] = inst.startMonth.split('-').map(Number);
+    const [my, mm] = monthStr.split('-').map(Number);
+    const payNum = (my - iy) * 12 + (mm - im) + 1;
+
+    const nonCreditAccounts = Storage.getAccounts().filter(a => a.type !== 'credit');
+    const expenseCats = Storage.getExpenseCategories().filter(c => c !== 'Plazos / MSI');
+
+    App.openModal(`Registrar pago — ${Storage.formatMonth(monthStr)}`, `
+      <div class="form-grid">
+        <div class="form-group" style="grid-column:1/-1">
+          <div class="install-pay-summary">
+            <div class="install-pay-name">${_esc(inst.description)}</div>
+            <div class="install-pay-detail">Pago <strong>${payNum} de ${inst.months}</strong> &bull;
+              <span class="text-danger">${Storage.formatCurrency(inst.monthlyAmount)}</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>Cuenta de origen (de donde sale el dinero)</label>
+          <select id="pay-account" class="form-input">
+            ${nonCreditAccounts.map(a => `<option value="${a.id}">${a.name}</option>`).join('')}
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label>Categoría (para el presupuesto de este mes)</label>
+          <select id="pay-category" class="form-input">
+            ${expenseCats.map(c => `<option value="${_esc(c)}">${_esc(c)}</option>`).join('')}
+          </select>
+        </div>
+
+        <div class="form-group" style="grid-column:1/-1">
+          <label><i class="fas fa-note-sticky"></i> Nota (opcional)</label>
+          <input id="pay-nota" type="text" class="form-input" placeholder="Ej. Pago BBVA online..." />
+        </div>
+
+        <div class="form-actions" style="grid-column:1/-1">
+          <button type="button" class="btn btn-ghost" onclick="App.closeModal()">Cancelar</button>
+          <button type="button" class="btn btn-primary" id="pay-confirm-btn">
+            <i class="fas fa-check"></i> Confirmar pago
+          </button>
+        </div>
+      </div>
+    `);
+
+    document.getElementById('pay-confirm-btn').addEventListener('click', () => {
+      _savePayment(instId, monthStr, payNum);
+    });
+  }
+
+  function _savePayment(instId, monthStr, payNum) {
+    const fromAccountId = document.getElementById('pay-account').value;
+    const category      = document.getElementById('pay-category').value;
+    const nota          = document.getElementById('pay-nota').value.trim();
+
+    const inst = Storage.getInstallments().find(x => x.id === instId);
+    if (!inst || !fromAccountId || !category) {
+      App.toast('Completa todos los campos', 'error'); return;
+    }
+
+    const amount = inst.monthlyAmount;
+    const date   = monthStr + '-01';
+    const transactions = Storage.getTransactions();
+    const accounts     = Storage.getAccounts();
+
+    // 1. Gasto en cuenta de origen (cuenta en presupuesto ese mes)
+    const txGasto = {
+      id: Storage.generateId(),
+      date, type: 'expense', category,
+      description: `Plazo: ${inst.description} (${payNum}/${inst.months})`,
+      nota, amount,
+      accountId: fromAccountId,
+      toAccountId: null,
+      installmentId: instId
+    };
+
+    // 2. Ingreso en la TC (reduce la deuda)
+    const txAbono = {
+      id: Storage.generateId(),
+      date, type: 'income', category: 'Plazos / MSI',
+      description: `Abono plazo: ${inst.description} (${payNum}/${inst.months})`,
+      nota, amount,
+      accountId: inst.accountId,
+      toAccountId: null,
+      installmentId: instId,
+      skipBudget: true    // no cuenta como ingreso real
+    };
+
+    transactions.push(txGasto, txAbono);
+
+    // Actualizar balances
+    const srcAccount = accounts.find(a => a.id === fromAccountId);
+    const tcAccount  = accounts.find(a => a.id === inst.accountId);
+    if (srcAccount) srcAccount.balance = (srcAccount.balance || 0) - amount;
+    if (tcAccount)  tcAccount.balance  = Math.max(0, (tcAccount.balance || 0) - amount);
+
+    Storage.saveAccounts(accounts);
+    Storage.saveTransactions(transactions);
+
+    // Marcar mes como pagado en el plazo
+    const installments = Storage.getInstallments();
+    const idx = installments.findIndex(x => x.id === instId);
+    if (idx > -1) {
+      installments[idx].paidMonths = [...(installments[idx].paidMonths || []), monthStr];
+      // Archivar si ya se pagaron todos los meses
+      if (installments[idx].paidMonths.length >= inst.months) {
+        installments[idx].archived = true;
+      }
+    }
+    Storage.saveInstallments(installments);
+
+    App.closeModal();
+    App.toast(`Pago ${payNum}/${inst.months} registrado`, 'success');
     render();
     App.renderDashboard();
   }
@@ -468,7 +652,7 @@ const Installments = (() => {
 
   window.Installments = {
     render, openAddModal, openEditModal, deleteInstallment,
-    openScheduleModal, renderCreditStatement,
+    openPayModal, openScheduleModal, renderCreditStatement,
     getTotalDueThisMonth, getUpcomingInstallments,
     _calcMonthly
   };

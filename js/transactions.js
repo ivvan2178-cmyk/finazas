@@ -45,7 +45,7 @@ const Transactions = (() => {
     const container = document.getElementById('transactions-list');
     if (!container) return;
 
-    let txs = Storage.getTransactions();
+    let txs = Storage.getTransactions().filter(t => !t.skipBudget);
     const f = _currentFilters;
 
     if (f.month && f.month !== 'all') txs = txs.filter(t => (t.date || '').startsWith(f.month));

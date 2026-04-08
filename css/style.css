@@ -391,7 +391,12 @@ nav { padding: .6rem 0; flex: 1; }
 .install-progress-label { display: flex; justify-content: space-between; font-size: .68rem; color: var(--text-muted); margin-bottom: .35rem; }
 .progress-bar { height: 4px; background: var(--border2); border-radius: 99px; overflow: hidden; }
 .progress-fill { height: 100%; border-radius: 99px; transition: width .4s ease; }
-.install-actions { display: flex; gap: .4rem; margin-top: .85rem; padding-top: .65rem; border-top: 1px solid var(--border); }
+.install-actions { display: flex; gap: .4rem; margin-top: .85rem; padding-top: .65rem; border-top: 1px solid var(--border); flex-wrap: wrap; }
+
+/* ─── Pay modal summary ─── */
+.install-pay-summary { background: var(--bg3); border: 1px solid var(--border); border-radius: .6rem; padding: .9rem 1.1rem; }
+.install-pay-name { font-weight: 700; color: var(--white); margin-bottom: .3rem; }
+.install-pay-detail { font-size: .82rem; color: var(--text-muted); }
 
 /* ─── Credit Statement ─── */
 .credit-controls { display: flex; gap: .85rem; align-items: center; flex-wrap: wrap; margin-bottom: 1.25rem; }

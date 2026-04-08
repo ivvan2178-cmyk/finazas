@@ -15,7 +15,7 @@ const Storage = (() => {
   const DEFAULT_EXPENSE_CATS = [
     'Comida / Restaurante', 'Servicios', 'Transporte', 'Salud',
     'Salida / Entretenimiento', 'Super / Despensa', 'Ropa / Moda',
-    'Educación', 'Hogar / Mantenimiento', 'Suscripciones', 'Otros Gastos'
+    'Educación', 'Hogar / Mantenimiento', 'Suscripciones', 'Plazos / MSI', 'Otros Gastos'
   ];
   const DEFAULT_INCOME_CATS = [
     'Salario', 'Inversión / Rendimientos', 'Dinero Extra', 'Otros Ingresos'

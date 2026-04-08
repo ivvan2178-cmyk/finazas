@@ -260,8 +260,8 @@ const App = (() => {
     const currentMonth = Storage.getCurrentMonth();
     const monthTxs = Transactions.getForMonth(currentMonth);
 
-    const monthIncome = monthTxs.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0);
-    const monthExpense = monthTxs.filter(t => t.type === 'expense').reduce((s, t) => s + t.amount, 0);
+    const monthIncome = monthTxs.filter(t => t.type === 'income' && !t.skipBudget).reduce((s, t) => s + t.amount, 0);
+    const monthExpense = monthTxs.filter(t => t.type === 'expense' && !t.skipBudget).reduce((s, t) => s + t.amount, 0);
 
     // Stat cards
     _setEl('db-assets', Storage.formatCurrency(summary.assets));

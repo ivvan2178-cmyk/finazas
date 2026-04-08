@@ -12,7 +12,7 @@ const Budget = (() => {
     const budgets = Storage.getBudgetForMonth(_currentMonth);
     const expenseCats = Storage.getExpenseCategories();
     const txs = Storage.getTransactions().filter(t =>
-      t.type === 'expense' && (t.date || '').startsWith(_currentMonth)
+      t.type === 'expense' && (t.date || '').startsWith(_currentMonth) && !t.skipBudget
     );
 
     // Gasto por categoría
