@@ -167,7 +167,14 @@ const Storage = (() => {
     _pending++;
     _syncUI(true);
     fn()
-      .catch(err => console.error('[Storage] sync error:', err.message || err))
+      .catch(err => {
+        const msg = err?.message || String(err);
+        console.error('[Storage] sync error:', msg);
+        // Mostrar error visible al usuario para debugging
+        if (typeof App !== 'undefined' && App.toast) {
+          App.toast('Error al guardar: ' + msg, 'error');
+        }
+      })
       .finally(() => { _pending--; _syncUI(_pending > 0); });
   }
 
