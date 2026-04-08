@@ -189,6 +189,11 @@ const Installments = (() => {
         </div>
 
         <div class="form-group">
+          <label>Fecha de la compra</label>
+          <input id="inst-date" type="date" class="form-input" value="${Storage.getCurrentDate()}" required />
+        </div>
+
+        <div class="form-group" style="grid-column:1/-1">
           <label>Primer mes de pago</label>
           <input id="inst-start" type="month" class="form-input" value="${Storage.getCurrentMonth()}" required />
         </div>
@@ -260,6 +265,10 @@ const Installments = (() => {
           </select>
         </div>
         <div class="form-group">
+          <label>Fecha de la compra</label>
+          <input id="inst-date" type="date" class="form-input" value="${inst.date || inst.startMonth + '-01'}" required />
+        </div>
+        <div class="form-group" style="grid-column:1/-1">
           <label>Primer mes de pago</label>
           <input id="inst-start" type="month" class="form-input" value="${inst.startMonth}" required />
         </div>
@@ -285,16 +294,17 @@ const Installments = (() => {
     const totalAmount = parseFloat(document.getElementById('inst-total').value) || 0;
     const months = parseInt(document.getElementById('inst-months').value) || 12;
     const accountId = document.getElementById('inst-account').value;
+    const date = document.getElementById('inst-date').value;
     const startMonth = document.getElementById('inst-start').value;
     const nota = document.getElementById('inst-nota').value.trim();
 
-    if (!description || !totalAmount || !accountId || !startMonth) {
+    if (!description || !totalAmount || !accountId || !date || !startMonth) {
       App.toast('Completa todos los campos requeridos', 'error'); return;
     }
 
     const monthlyAmount = Math.round((totalAmount / months) * 100) / 100;
     const installments = Storage.getInstallments();
-    const data = { description, totalAmount, months, monthlyAmount, accountId, startMonth, nota, archived: false };
+    const data = { description, totalAmount, months, monthlyAmount, accountId, date, startMonth, nota, archived: false };
 
     if (id) {
       const idx = installments.findIndex(x => x.id === id);
@@ -306,7 +316,7 @@ const Installments = (() => {
 
       // Cargo inicial en la TC: gasto por el total, categoría "Plazos / MSI"
       // (no cuenta en presupuesto — solo refleja la deuda adquirida)
-      const txDate = startMonth + '-01';
+      const txDate = date;
       const tx = {
         id: Storage.generateId(),
         date: txDate,
