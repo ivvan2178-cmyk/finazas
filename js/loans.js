@@ -168,9 +168,26 @@ const Loans = (() => {
       Storage.saveAccounts(accs);
     }
 
+    const loanId = uid();
     const loans = Storage.getLoans();
-    loans.unshift({ id: uid(), personName, amount, fromAccountId, date, dueDate, description, note, payments: [], createdAt: new Date().toISOString() });
+    loans.unshift({ id: loanId, personName, amount, fromAccountId, date, dueDate, description, note, payments: [], createdAt: new Date().toISOString() });
     Storage.saveLoans(loans);
+
+    // Registrar en movimientos como préstamo otorgado
+    const txs = Storage.getTransactions();
+    txs.push({
+      id: uid(),
+      date, type: 'expense', category: 'Préstamos',
+      description: `Préstamo a ${personName}`,
+      nota: description || note || '',
+      amount,
+      accountId: fromAccountId,
+      toAccountId: null,
+      loanId,
+      skipBudget: true,   // no cuenta en gastos del mes ni presupuesto
+      isLoan: true        // se muestra con etiqueta especial
+    });
+    Storage.saveTransactions(txs);
 
     App.closeModal();
     App.toast(`Préstamo de ${fmt(amount)} a ${personName} registrado`, 'success');
@@ -241,12 +258,31 @@ const Loans = (() => {
       }
     }
 
+    const loan = Storage.getLoans().find(l => l.id === loanId);
     const loans = Storage.getLoans();
     const li = loans.findIndex(l => l.id === loanId);
     if (li !== -1) {
       loans[li].payments = loans[li].payments || [];
       loans[li].payments.push({ id: uid(), amount, date, toAccountId: toAccountId || null, note });
       Storage.saveLoans(loans);
+    }
+
+    // Registrar cobro en movimientos
+    if (loan) {
+      const txs = Storage.getTransactions();
+      txs.push({
+        id: uid(),
+        date, type: 'income', category: 'Préstamos',
+        description: `Cobro préstamo: ${esc(loan.personName)}`,
+        nota: note || '',
+        amount,
+        accountId: toAccountId || loan.fromAccountId,
+        toAccountId: null,
+        loanId,
+        skipBudget: true,   // no cuenta como ingreso real
+        isLoanPayment: true // etiqueta especial en movimientos
+      });
+      Storage.saveTransactions(txs);
     }
 
     App.closeModal();
@@ -310,6 +346,9 @@ const Loans = (() => {
     });
     Storage.saveAccounts(accs);
 
+    // Eliminar transacciones asociadas al préstamo
+    Storage.saveTransactions(Storage.getTransactions().filter(t => t.loanId !== loanId));
+
     Storage.saveLoans(Storage.getLoans().filter(l => l.id !== loanId));
     App.toast('Préstamo eliminado', 'success');
     render();
@@ -317,7 +356,13 @@ const Loans = (() => {
 
   /* ─── Dashboard helper ─── */
   function getTotalOwed() {
-    return Storage.getLoans().reduce((s, l) => s + _owed(l), 0);
+    const accs = Storage.getAccounts();
+    return Storage.getLoans().reduce((s, l) => {
+      const src = accs.find(a => a.id === l.fromAccountId);
+      // Solo cuentas de capital (no TC) afectan "por cobrar"
+      if (src && src.type === 'credit') return s;
+      return s + _owed(l);
+    }, 0);
   }
 
   window.Loans = { render, openAddModal, openPaymentModal, openDetailModal, _create, _pay, _del, getTotalOwed };

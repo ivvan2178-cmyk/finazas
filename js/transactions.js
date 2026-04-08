@@ -45,8 +45,8 @@ const Transactions = (() => {
     const container = document.getElementById('transactions-list');
     if (!container) return;
 
-    // Mostrar todo excepto abonos internos (skipBudget pero que NO son deuda de plazo)
-    let txs = Storage.getTransactions().filter(t => !t.skipBudget || t.isDebt);
+    // Mostrar todo excepto abonos internos (skipBudget sin etiqueta visible)
+    let txs = Storage.getTransactions().filter(t => !t.skipBudget || t.isDebt || t.isLoan || t.isLoanPayment);
     const f = _currentFilters;
 
     if (f.month && f.month !== 'all') txs = txs.filter(t => (t.date || '').startsWith(f.month));
@@ -100,6 +100,44 @@ const Transactions = (() => {
   function _txItemHTML(t) {
     const accountName = Accounts.getName(t.accountId);
     const toAccountName = t.toAccountId ? Accounts.getName(t.toAccountId) : null;
+
+    // Préstamo otorgado
+    if (t.isLoan) {
+      return `
+        <div class="tx-item tx-item-loan">
+          <div class="tx-icon" style="background:rgba(14,165,233,.12);color:#38bdf8">
+            <i class="fas fa-handshake"></i>
+          </div>
+          <div class="tx-info">
+            <div class="tx-description">${_esc(t.description)}</div>
+            <div class="tx-meta">
+              <span class="tx-account"><i class="fas fa-wallet"></i> ${_esc(Accounts.getName(t.accountId))}</span>
+              <span class="tx-badge tx-badge-loan">Préstamo</span>
+            </div>
+            ${t.nota ? `<div class="tx-nota"><i class="fas fa-note-sticky"></i> ${_esc(t.nota)}</div>` : ''}
+          </div>
+          <div class="tx-amount text-blue">-${Storage.formatCurrency(t.amount)}</div>
+        </div>`;
+    }
+
+    // Cobro de préstamo
+    if (t.isLoanPayment) {
+      return `
+        <div class="tx-item tx-item-loan">
+          <div class="tx-icon" style="background:rgba(14,165,233,.12);color:#38bdf8">
+            <i class="fas fa-hand-holding-dollar"></i>
+          </div>
+          <div class="tx-info">
+            <div class="tx-description">${_esc(t.description)}</div>
+            <div class="tx-meta">
+              <span class="tx-account"><i class="fas fa-wallet"></i> ${_esc(Accounts.getName(t.accountId))}</span>
+              <span class="tx-badge tx-badge-loan">Cobro</span>
+            </div>
+            ${t.nota ? `<div class="tx-nota"><i class="fas fa-note-sticky"></i> ${_esc(t.nota)}</div>` : ''}
+          </div>
+          <div class="tx-amount text-success">+${Storage.formatCurrency(t.amount)}</div>
+        </div>`;
+    }
 
     // Deuda de plazo: estilo especial, no es gasto ni ingreso
     if (t.isDebt) {

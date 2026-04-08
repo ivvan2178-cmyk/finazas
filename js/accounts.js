@@ -99,7 +99,9 @@ const Accounts = (() => {
       if (a.type === 'credit') debt += (a.balance || 0);
       else assets += (a.balance || 0);
     });
-    return { assets, debt, net: assets - debt };
+    // Por cobrar (solo préstamos desde cuentas de capital) suma al patrimonio
+    const owed = typeof Loans !== 'undefined' ? Loans.getTotalOwed() : 0;
+    return { assets, debt, net: assets - debt + owed };
   }
 
   /* ─── Modal: Agregar cuenta ─── */
