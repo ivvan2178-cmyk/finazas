@@ -366,6 +366,8 @@ nav { padding: .6rem 0; flex: 1; }
 .tx-account { font-size: .68rem; color: var(--text-muted); display: flex; align-items: center; gap: .25rem; }
 .tx-category { font-size: .65rem; padding: .12rem .45rem; border-radius: 99px; background: rgba(99,102,241,.12); color: var(--purple-lt); border: 1px solid rgba(99,102,241,.2); }
 .tx-badge { font-size: .62rem; padding: .08rem .4rem; border-radius: 99px; background: rgba(234,179,8,.12); color: var(--yellow); border: 1px solid rgba(234,179,8,.2); font-weight: 700; }
+.tx-badge-debt { background: rgba(124,58,237,.15); color: #a78bfa; border-color: rgba(124,58,237,.3); }
+.tx-item-debt { border-left: 3px solid #7c3aed; cursor: default; }
 .tx-nota { font-size: .68rem; color: var(--text-muted); margin-top: .2rem; display: flex; align-items: flex-start; gap: .3rem; font-style: italic; }
 .tx-amount { font-size: .9rem; font-weight: 700; white-space: nowrap; flex-shrink: 0; }
 

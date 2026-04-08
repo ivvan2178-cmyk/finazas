@@ -318,7 +318,8 @@ const Installments = (() => {
         accountId: accountId,
         toAccountId: null,
         installmentId: data.id,
-        skipBudget: true    // marca para excluir del presupuesto y stats del mes
+        skipBudget: true,   // no cuenta en presupuesto ni stats del mes
+        isDebt: true        // se muestra en movimientos como "Deuda"
       };
       const transactions = Storage.getTransactions();
       transactions.push(tx);

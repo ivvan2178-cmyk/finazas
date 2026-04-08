@@ -45,7 +45,8 @@ const Transactions = (() => {
     const container = document.getElementById('transactions-list');
     if (!container) return;
 
-    let txs = Storage.getTransactions().filter(t => !t.skipBudget);
+    // Mostrar todo excepto abonos internos (skipBudget pero que NO son deuda de plazo)
+    let txs = Storage.getTransactions().filter(t => !t.skipBudget || t.isDebt);
     const f = _currentFilters;
 
     if (f.month && f.month !== 'all') txs = txs.filter(t => (t.date || '').startsWith(f.month));
@@ -99,6 +100,27 @@ const Transactions = (() => {
   function _txItemHTML(t) {
     const accountName = Accounts.getName(t.accountId);
     const toAccountName = t.toAccountId ? Accounts.getName(t.toAccountId) : null;
+
+    // Deuda de plazo: estilo especial, no es gasto ni ingreso
+    if (t.isDebt) {
+      return `
+        <div class="tx-item tx-item-debt">
+          <div class="tx-icon" style="background:#7c3aed22;color:#a78bfa">
+            <i class="fas fa-credit-card"></i>
+          </div>
+          <div class="tx-info">
+            <div class="tx-description">${_esc(t.description)}</div>
+            <div class="tx-meta">
+              <span class="tx-account"><i class="fas fa-credit-card"></i> ${_esc(accountName)}</span>
+              <span class="tx-category">${_esc(t.category)}</span>
+              <span class="tx-badge tx-badge-debt">Deuda plazo</span>
+            </div>
+            ${t.nota ? `<div class="tx-nota"><i class="fas fa-note-sticky"></i> ${_esc(t.nota)}</div>` : ''}
+          </div>
+          <div class="tx-amount text-purple">-${Storage.formatCurrency(t.amount)}</div>
+        </div>`;
+    }
+
     const icons = { income: 'fa-arrow-down', expense: 'fa-arrow-up', transfer: 'fa-arrows-left-right' };
     const colors = { income: 'var(--green)', expense: 'var(--red)', transfer: 'var(--blue)' };
     const sign = t.type === 'income' ? '+' : t.type === 'expense' ? '-' : '';
