@@ -203,7 +203,7 @@ const Loans = (() => {
             <div class="form-group">
               <label>Número de meses</label>
               <select id="l-plan-months" class="form-input" onchange="Loans._calcLoanMonthly()">
-                ${[2,3,4,5,6,8,10,12,18,24].map(m=>`<option value="${m}">${m} meses</option>`).join('')}
+                ${[2,3,4,5,6,8,10,12,15,18,24].map(m=>`<option value="${m}">${m} meses</option>`).join('')}
               </select>
             </div>
             <div class="form-group">
