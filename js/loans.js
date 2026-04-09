@@ -61,6 +61,8 @@ const Loans = (() => {
       btn.addEventListener('click', () => openPaymentModal(btn.dataset.payLoan)));
     el.querySelectorAll('[data-detail-loan]').forEach(btn =>
       btn.addEventListener('click', () => openDetailModal(btn.dataset.detailLoan)));
+    el.querySelectorAll('[data-edit-loan]').forEach(btn =>
+      btn.addEventListener('click', () => openEditModal(btn.dataset.editLoan)));
     el.querySelectorAll('[data-del-loan]').forEach(btn =>
       btn.addEventListener('click', () => _del(btn.dataset.delLoan)));
   }
@@ -141,6 +143,9 @@ const Loans = (() => {
           </button>` : ''}
           <button class="btn btn-ghost btn-sm" data-detail-loan="${loan.id}">
             <i class="fas fa-list"></i> Historial
+          </button>
+          <button class="btn-icon" data-edit-loan="${loan.id}" title="Editar">
+            <i class="fas fa-pen"></i>
           </button>
           <button class="btn-icon btn-danger" data-del-loan="${loan.id}">
             <i class="fas fa-trash-can"></i>
@@ -304,6 +309,132 @@ const Loans = (() => {
 
     App.closeModal();
     App.toast(`Préstamo de ${fmt(amount)} a ${personName} registrado`, 'success');
+    render();
+    App.renderDashboard();
+  }
+
+  /* ─── Modal: Editar préstamo ─── */
+  function openEditModal(loanId) {
+    const loan = Storage.getLoans().find(l => l.id === loanId);
+    if (!loan) return;
+    const accs = Storage.getAccounts();
+    const plan = _getPlan(loan);
+
+    App.openModal(`Editar préstamo — ${esc(loan.personName)}`, `
+      <div class="form-grid">
+        <div class="form-group">
+          <label>Persona / Nombre</label>
+          <input id="le-person" type="text" class="form-input" value="${esc(loan.personName)}" autocomplete="off" />
+        </div>
+        <div class="form-group">
+          <label>Fecha del préstamo</label>
+          <input id="le-date" type="date" class="form-input" value="${loan.date || ''}" />
+        </div>
+        <div class="form-group">
+          <label>Monto (MXN)</label>
+          <input id="le-amount" type="number" class="form-input" value="${loan.amount}" min="0.01" step="0.01" />
+        </div>
+        <div class="form-group">
+          <label>Cuenta origen</label>
+          <select id="le-account" class="form-input">
+            ${accs.map(a => `<option value="${a.id}" ${a.id === loan.fromAccountId ? 'selected' : ''}>${esc(a.name)}</option>`).join('')}
+          </select>
+        </div>
+        <div class="form-group" style="grid-column:span 2">
+          <label>Descripción (opcional)</label>
+          <input id="le-desc" type="text" class="form-input" value="${esc(loan.description || '')}" autocomplete="off" />
+        </div>
+        <div class="form-group">
+          <label>Fecha de vencimiento (opcional)</label>
+          <input id="le-due" type="date" class="form-input" value="${loan.dueDate || ''}" />
+        </div>
+        ${plan ? `
+        <div class="form-group" style="grid-column:1/-1">
+          <label>Plan de cobro en plazos</label>
+          <div class="form-grid" style="padding:0">
+            <div class="form-group">
+              <label>Número de meses</label>
+              <select id="le-plan-months" class="form-input" onchange="Loans._calcEditMonthly()">
+                ${[2,3,4,5,6,8,10,12,15,18,24].map(m=>`<option value="${m}" ${m===plan.months?'selected':''}>${m} meses</option>`).join('')}
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Primer mes de cobro</label>
+              <input id="le-plan-start" type="month" class="form-input" value="${plan.startMonth}" onchange="Loans._calcEditMonthly()" />
+            </div>
+          </div>
+        </div>` : ''}
+        <div class="form-group" style="grid-column:1/-1">
+          <label>Nota</label>
+          <textarea id="le-note" class="form-input" rows="2">${esc(loan.note || '')}</textarea>
+        </div>
+      </div>
+      <div class="form-actions">
+        <button type="button" class="btn btn-ghost" onclick="App.closeModal()">Cancelar</button>
+        <button type="button" class="btn btn-primary" onclick="Loans._update('${loanId}')">
+          <i class="fas fa-check"></i> Guardar cambios
+        </button>
+      </div>`);
+  }
+
+  function _calcEditMonthly() {
+    const amount = parseFloat(document.getElementById('le-amount')?.value) || 0;
+    const months = parseInt(document.getElementById('le-plan-months')?.value) || 1;
+    // solo recalcular para vista, el guardado lo hace _update
+    _ = { amount, months }; // noop — cálculo se hace en _update
+  }
+
+  function _update(loanId) {
+    const personName    = document.getElementById('le-person')?.value.trim();
+    const amount        = parseFloat(document.getElementById('le-amount')?.value);
+    const fromAccountId = document.getElementById('le-account')?.value;
+    const date          = document.getElementById('le-date')?.value;
+    const description   = document.getElementById('le-desc')?.value.trim();
+    const dueDate       = document.getElementById('le-due')?.value || '';
+    const note          = document.getElementById('le-note')?.value.trim();
+
+    if (!personName)           { App.toast('Escribe el nombre', 'error'); return; }
+    if (!amount || amount <= 0){ App.toast('El monto debe ser mayor a 0', 'error'); return; }
+    if (!fromAccountId)        { App.toast('Selecciona la cuenta origen', 'error'); return; }
+
+    const loans = Storage.getLoans();
+    const idx   = loans.findIndex(l => l.id === loanId);
+    if (idx === -1) return;
+
+    const oldLoan  = loans[idx];
+    const oldAmount = oldLoan.amount;
+    const plan     = _getPlan(oldLoan);
+
+    // Actualizar plan si existe
+    let payments = oldLoan.payments || [];
+    if (plan) {
+      const planMonths = parseInt(document.getElementById('le-plan-months')?.value) || plan.months;
+      const planStart  = document.getElementById('le-plan-start')?.value || plan.startMonth;
+      const planMonthly = Math.round((amount / planMonths) * 100) / 100;
+      payments = payments.map(p => p._plan
+        ? { _plan: true, months: planMonths, startMonth: planStart, monthlyAmount: planMonthly }
+        : p);
+    }
+
+    loans[idx] = { ...oldLoan, personName, amount, fromAccountId, date, dueDate, description, note, payments };
+    Storage.saveLoans(loans);
+
+    // Ajustar balance de la cuenta si cambió el monto
+    const diff = amount - oldAmount;
+    if (Math.abs(diff) > 0.001) {
+      const accs = Storage.getAccounts();
+      const ai   = accs.findIndex(a => a.id === fromAccountId);
+      if (ai !== -1) {
+        const a = accs[ai];
+        a.balance = a.type === 'credit'
+          ? (a.balance || 0) + diff
+          : (a.balance || 0) - diff;
+        Storage.saveAccounts(accs);
+      }
+    }
+
+    App.closeModal();
+    App.toast('Préstamo actualizado', 'success');
     render();
     App.renderDashboard();
   }
@@ -513,8 +644,9 @@ const Loans = (() => {
   }
 
   window.Loans = {
-    render, openAddModal, openPaymentModal, openDetailModal,
-    _create, _pay, _del, getTotalOwed, _togglePlan, _calcLoanMonthly
+    render, openAddModal, openEditModal, openPaymentModal, openDetailModal,
+    _create, _update, _pay, _del, getTotalOwed,
+    _togglePlan, _calcLoanMonthly, _calcEditMonthly
   };
   return window.Loans;
 })();
