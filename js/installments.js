@@ -325,7 +325,30 @@ const Installments = (() => {
 
     if (id) {
       const idx = installments.findIndex(x => x.id === id);
-      if (idx > -1) installments[idx] = { ...installments[idx], ...data };
+      if (idx > -1) {
+        const old = installments[idx];
+        const oldTotal = old.totalAmount;
+        installments[idx] = { ...old, ...data };
+
+        // Si cambió el monto total, actualizar la transacción inicial y el saldo de la TC
+        if (Math.abs(totalAmount - oldTotal) > 0.001) {
+          const diff = totalAmount - oldTotal;
+          const txs = Storage.getTransactions();
+          const initTx = txs.find(t =>
+            t.installmentId === id &&
+            t.type === 'expense' &&
+            t.category === 'Plazos / MSI' &&
+            Math.abs(t.amount - oldTotal) < 0.01
+          );
+          if (initTx) initTx.amount = totalAmount;
+          Storage.saveTransactions(txs);
+
+          const accounts = Storage.getAccounts();
+          const tc = accounts.find(a => a.id === accountId);
+          if (tc) tc.balance = (tc.balance || 0) + diff;
+          Storage.saveAccounts(accounts);
+        }
+      }
     } else {
       data.id = Storage.generateId();
       data.paidMonths = [];

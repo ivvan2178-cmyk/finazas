@@ -104,7 +104,7 @@ const Transactions = (() => {
     // Préstamo otorgado
     if (t.isLoan) {
       return `
-        <div class="tx-item tx-item-loan">
+        <div class="tx-item tx-item-loan" onclick="Transactions.openEditModal('${t.id}')" style="cursor:pointer">
           <div class="tx-icon" style="background:rgba(14,165,233,.12);color:#38bdf8">
             <i class="fas fa-handshake"></i>
           </div>
@@ -117,13 +117,16 @@ const Transactions = (() => {
             ${t.nota ? `<div class="tx-nota"><i class="fas fa-note-sticky"></i> ${_esc(t.nota)}</div>` : ''}
           </div>
           <div class="tx-amount text-blue">-${Storage.formatCurrency(t.amount)}</div>
+          <button class="btn-icon btn-danger" onclick="event.stopPropagation();Transactions.deleteTransaction('${t.id}')" title="Eliminar">
+            <i class="fas fa-trash"></i>
+          </button>
         </div>`;
     }
 
     // Cobro de préstamo
     if (t.isLoanPayment) {
       return `
-        <div class="tx-item tx-item-loan">
+        <div class="tx-item tx-item-loan" onclick="Transactions.openEditModal('${t.id}')" style="cursor:pointer">
           <div class="tx-icon" style="background:rgba(14,165,233,.12);color:#38bdf8">
             <i class="fas fa-hand-holding-dollar"></i>
           </div>
@@ -136,13 +139,16 @@ const Transactions = (() => {
             ${t.nota ? `<div class="tx-nota"><i class="fas fa-note-sticky"></i> ${_esc(t.nota)}</div>` : ''}
           </div>
           <div class="tx-amount text-success">+${Storage.formatCurrency(t.amount)}</div>
+          <button class="btn-icon btn-danger" onclick="event.stopPropagation();Transactions.deleteTransaction('${t.id}')" title="Eliminar">
+            <i class="fas fa-trash"></i>
+          </button>
         </div>`;
     }
 
     // Deuda de plazo: estilo especial, no es gasto ni ingreso
     if (t.isDebt) {
       return `
-        <div class="tx-item tx-item-debt">
+        <div class="tx-item tx-item-debt" onclick="Transactions.openEditModal('${t.id}')" style="cursor:pointer">
           <div class="tx-icon" style="background:#7c3aed22;color:#a78bfa">
             <i class="fas fa-credit-card"></i>
           </div>
@@ -156,6 +162,9 @@ const Transactions = (() => {
             ${t.nota ? `<div class="tx-nota"><i class="fas fa-note-sticky"></i> ${_esc(t.nota)}</div>` : ''}
           </div>
           <div class="tx-amount text-purple">-${Storage.formatCurrency(t.amount)}</div>
+          <button class="btn-icon btn-danger" onclick="event.stopPropagation();Transactions.deleteTransaction('${t.id}')" title="Eliminar">
+            <i class="fas fa-trash"></i>
+          </button>
         </div>`;
     }
 
