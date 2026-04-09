@@ -582,14 +582,14 @@ const Installments = (() => {
     `);
 
     // Event delegation dentro del modal
-    const modal = document.getElementById('app-modal');
-    modal.querySelectorAll('[data-pay-inst]').forEach(btn =>
+    const modalBody = document.getElementById('modal-body');
+    modalBody.querySelectorAll('[data-pay-inst]').forEach(btn =>
       btn.addEventListener('click', () => {
         App.closeModal();
         openPayModal(btn.dataset.payInst, btn.dataset.payMonth);
       })
     );
-    modal.querySelectorAll('[data-unpay-month]').forEach(btn =>
+    modalBody.querySelectorAll('[data-unpay-month]').forEach(btn =>
       btn.addEventListener('click', () => _undoPayment(btn.dataset.instId, btn.dataset.unpayMonth))
     );
   }
