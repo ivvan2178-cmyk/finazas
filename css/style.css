@@ -641,8 +641,30 @@ textarea.form-input { resize: vertical; min-height: 65px; }
 .loan-modal-info { background: var(--surface2); border-radius: var(--radius-sm); padding: .75rem .9rem; margin-bottom: 1.1rem; font-size: .83rem; color: var(--text-muted); }
 .loan-payment-list { display: flex; flex-direction: column; gap: .35rem; margin-bottom: 1rem; }
 .loan-payment-row { display: flex; align-items: center; justify-content: space-between; padding: .6rem .75rem; background: var(--surface2); border-radius: var(--radius-sm); }
+.lpr-num    { font-size: .75rem; font-weight: 700; color: var(--purple-lt); min-width: 70px; }
 .lpr-amount { font-size: .9rem; font-weight: 700; }
 .lpr-meta { font-size: .72rem; color: var(--text-muted); margin-top: .08rem; }
+
+/* ─── Loans: grouped by person ─── */
+.loan-person-group { margin-bottom: 1.5rem; }
+.loan-person-header {
+  display: flex; align-items: center; gap: .75rem;
+  padding: .65rem .85rem; margin-bottom: .6rem;
+  background: var(--surface2); border-radius: var(--radius);
+  border: 1px solid var(--border);
+}
+.loan-person-header .loan-avatar {
+  width: 38px; height: 38px; font-size: .9rem;
+}
+.loan-person-header-info { flex: 1; min-width: 0; }
+.loan-person-header-info .loan-person-name { font-size: .92rem; margin-bottom: .1rem; }
+.loan-person-cards { display: flex; flex-direction: column; gap: .6rem; padding-left: .5rem; border-left: 2px solid var(--border); }
+.loan-plan-badge {
+  display: inline-flex; align-items: center; gap: .4rem;
+  margin-top: .35rem; padding: .2rem .55rem;
+  background: rgba(99,102,241,.1); border: 1px solid rgba(99,102,241,.25);
+  border-radius: 99px; font-size: .68rem; font-weight: 600; color: var(--purple-lt);
+}
 
 /* ─── Login ─── */
 #login-screen {
@@ -681,6 +703,30 @@ textarea.form-input { resize: vertical; min-height: 65px; }
 }
 .auth-toggle:hover { color: var(--text); }
 .auth-toggle strong { color: var(--purple-lt); }
+
+/* ─── Login Screen ─── */
+#login-screen {
+  position: fixed; inset: 0; z-index: 100;
+  background: var(--bg);
+  display: flex; align-items: center; justify-content: center;
+}
+.login-card {
+  width: 100%; max-width: 380px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 2rem 2rem 1.5rem;
+  display: flex; flex-direction: column; gap: 1rem;
+}
+.login-brand {
+  display: flex; align-items: center; gap: .75rem;
+  margin-bottom: .5rem;
+}
+.login-heading {
+  font-size: 1.1rem; font-weight: 700;
+  color: var(--white); margin: 0;
+}
+
 
 /* ─── Sidebar user ─── */
 .sidebar-user {
