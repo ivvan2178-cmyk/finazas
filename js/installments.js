@@ -57,7 +57,8 @@ const Installments = (() => {
   }
 
   function _installmentCardHTML(inst, currentMonth) {
-    const paid = _paidMonthsCount(inst);
+    const paidMonths = inst.paidMonths || [];
+    const paid = paidMonths.length;
     const remaining = inst.months - paid;
     const pct = Math.min(100, Math.round((paid / inst.months) * 100));
     const account = Accounts.getById(inst.accountId);
@@ -65,9 +66,22 @@ const Installments = (() => {
     const accountColor = account ? account.color : '#7c3aed';
     const isActive = !inst.archived;
     const dueThisMonth = _amountDueInMonth(inst, currentMonth);
-    const paidMonths = inst.paidMonths || [];
     const currentMonthPaid = paidMonths.includes(currentMonth);
     const canPayThisMonth = isActive && dueThisMonth > 0 && !currentMonthPaid;
+    const totalPaid = paid * inst.monthlyAmount;
+    const totalPending = Math.max(0, inst.totalAmount - totalPaid);
+
+    // Contar meses vencidos sin pagar
+    const [sy, sm] = inst.startMonth.split('-').map(Number);
+    const [cy, cm] = currentMonth.split('-').map(Number);
+    let overdueCount = 0;
+    for (let i = 0; i < inst.months; i++) {
+      const d = new Date(sy, sm - 1 + i, 1);
+      const ms = d.toISOString().slice(0, 7);
+      const [my, mm2] = ms.split('-').map(Number);
+      const diff = (my - cy) * 12 + (mm2 - cm);
+      if (diff < 0 && !paidMonths.includes(ms)) overdueCount++;
+    }
 
     return `
       <div class="installment-card ${inst.archived ? 'archived' : ''}">
@@ -86,12 +100,16 @@ const Installments = (() => {
           <span>${Storage.formatCurrency(inst.totalAmount)}</span>
         </div>
         <div class="install-detail-row">
-          <span class="text-muted">Plazo</span>
-          <span>${inst.months} meses</span>
+          <span class="text-muted">Abonado</span>
+          <span class="text-success">${Storage.formatCurrency(totalPaid)}</span>
         </div>
         <div class="install-detail-row">
-          <span class="text-muted">Primer pago</span>
-          <span>${Storage.formatMonth(inst.startMonth)}</span>
+          <span class="text-muted">Por pagar</span>
+          <span class="${totalPending > 0 ? 'text-danger' : 'text-success'}">${Storage.formatCurrency(totalPending)}</span>
+        </div>
+        <div class="install-detail-row">
+          <span class="text-muted">Plazo</span>
+          <span>${inst.months} meses</span>
         </div>
         ${isActive && dueThisMonth > 0 ? `
         <div class="install-detail-row highlight">
@@ -99,6 +117,11 @@ const Installments = (() => {
           <span class="${currentMonthPaid ? 'text-success' : 'text-danger'}">
             ${currentMonthPaid ? '<i class="fas fa-check-circle"></i> Pagado' : Storage.formatCurrency(dueThisMonth)}
           </span>
+        </div>` : ''}
+        ${overdueCount > 0 ? `
+        <div class="install-detail-row overdue-alert">
+          <span><i class="fas fa-exclamation-triangle"></i> Meses vencidos</span>
+          <span class="text-danger">${overdueCount} sin pagar</span>
         </div>` : ''}
 
         <div class="install-progress-section">
@@ -130,12 +153,6 @@ const Installments = (() => {
           ` : ''}
         </div>
       </div>`;
-  }
-
-  function _paidMonthsCount(inst) {
-    // Use explicit paidMonths array if available (new system)
-    if (inst.paidMonths) return inst.paidMonths.length;
-    return 0;
   }
 
   function _amountDueInMonth(inst, monthStr) {
@@ -497,38 +514,63 @@ const Installments = (() => {
   function openScheduleModal(id) {
     const inst = Storage.getInstallments().find(x => x.id === id);
     if (!inst) return;
+    _renderScheduleModal(inst);
+  }
 
+  function _renderScheduleModal(inst) {
     const currentMonth = Storage.getCurrentMonth();
-    const rows = [];
+    const paidMonths = inst.paidMonths || [];
     const [sy, sm] = inst.startMonth.split('-').map(Number);
+    const [cy, cm] = currentMonth.split('-').map(Number);
+    const totalPaid = paidMonths.length * inst.monthlyAmount;
 
+    const rows = [];
     for (let i = 0; i < inst.months; i++) {
-      const monthDate = new Date(sy, sm - 1 + i, 1);
-      const monthStr = monthDate.toISOString().slice(0, 7);
+      const d = new Date(sy, sm - 1 + i, 1);
+      const monthStr = d.toISOString().slice(0, 7);
       const [my, mm] = monthStr.split('-').map(Number);
-      const diff = (my - parseInt(currentMonth.split('-')[0])) * 12 + (mm - parseInt(currentMonth.split('-')[1]));
-      const isPast = diff < 0;
+      const diff = (my - cy) * 12 + (mm - cm);
+      const isPaid    = paidMonths.includes(monthStr);
       const isCurrent = diff === 0;
+      const isOverdue = diff < 0 && !isPaid;
+
+      let rowClass = isPaid ? 'paid' : isCurrent ? 'current' : isOverdue ? 'overdue' : 'pending';
+      let statusHtml;
+      if (isPaid) {
+        statusHtml = `<span class="text-success"><i class="fas fa-check-circle"></i> Pagado</span>
+          <button class="btn-icon-xs" data-unpay-month="${monthStr}" data-inst-id="${inst.id}" title="Deshacer pago">
+            <i class="fas fa-rotate-left"></i>
+          </button>`;
+      } else if (isOverdue) {
+        statusHtml = `<span class="text-danger"><i class="fas fa-exclamation-circle"></i> Vencido</span>
+          <button class="btn btn-xs btn-danger" data-pay-inst="${inst.id}" data-pay-month="${monthStr}">
+            Pagar
+          </button>`;
+      } else if (isCurrent) {
+        statusHtml = `<span class="text-warning"><i class="fas fa-clock"></i> Este mes</span>
+          <button class="btn btn-xs btn-primary" data-pay-inst="${inst.id}" data-pay-month="${monthStr}">
+            Pagar
+          </button>`;
+      } else {
+        statusHtml = `<span class="text-muted"><i class="fas fa-circle"></i> Pendiente</span>`;
+      }
 
       rows.push(`
-        <div class="schedule-row ${isPast ? 'paid' : isCurrent ? 'current' : 'pending'}">
+        <div class="schedule-row ${rowClass}">
           <div class="schedule-num">${i + 1}</div>
           <div class="schedule-month">${Storage.formatMonth(monthStr)}</div>
           <div class="schedule-amount">${Storage.formatCurrency(inst.monthlyAmount)}</div>
-          <div class="schedule-status">
-            ${isPast ? '<i class="fas fa-check-circle text-success"></i> Pagado'
-              : isCurrent ? '<i class="fas fa-clock text-warning"></i> Este mes'
-              : '<i class="fas fa-circle text-muted"></i> Pendiente'}
-          </div>
+          <div class="schedule-status">${statusHtml}</div>
         </div>`);
     }
 
-    App.openModal(`Calendario: ${inst.description}`, `
+    App.openModal(`Calendario: ${_esc(inst.description)}`, `
       <div class="schedule-header">
         <div class="schedule-summary">
           <div><span class="text-muted">Total:</span> <strong>${Storage.formatCurrency(inst.totalAmount)}</strong></div>
           <div><span class="text-muted">Mensualidad:</span> <strong class="text-purple">${Storage.formatCurrency(inst.monthlyAmount)}</strong></div>
-          <div><span class="text-muted">Plazo:</span> <strong>${inst.months} meses</strong></div>
+          <div><span class="text-muted">Abonado:</span> <strong class="text-success">${Storage.formatCurrency(totalPaid)}</strong></div>
+          <div><span class="text-muted">Por pagar:</span> <strong class="text-danger">${Storage.formatCurrency(Math.max(0, inst.totalAmount - totalPaid))}</strong></div>
         </div>
       </div>
       <div class="schedule-list">
@@ -538,6 +580,71 @@ const Installments = (() => {
         ${rows.join('')}
       </div>
     `);
+
+    // Event delegation dentro del modal
+    const modal = document.getElementById('app-modal');
+    modal.querySelectorAll('[data-pay-inst]').forEach(btn =>
+      btn.addEventListener('click', () => {
+        App.closeModal();
+        openPayModal(btn.dataset.payInst, btn.dataset.payMonth);
+      })
+    );
+    modal.querySelectorAll('[data-unpay-month]').forEach(btn =>
+      btn.addEventListener('click', () => _undoPayment(btn.dataset.instId, btn.dataset.unpayMonth))
+    );
+  }
+
+  /* ─── Deshacer un pago de mensualidad ─── */
+  function _undoPayment(instId, monthStr) {
+    if (!confirm(`¿Deshacer el pago de ${Storage.formatMonth(monthStr)}?\nSe revertirán los saldos.`)) return;
+
+    const installments = Storage.getInstallments();
+    const idx = installments.findIndex(x => x.id === instId);
+    if (idx === -1) return;
+    const inst = installments[idx];
+
+    // Eliminar las transacciones (gasto origen + abono TC) de ese mes
+    const txs = Storage.getTransactions();
+
+    // Buscar el gasto (origen) y el abono (TC) de ese mes específicamente
+    const gastoTx = txs.find(t =>
+      t.installmentId === instId &&
+      t.type === 'expense' &&
+      t.category !== 'Plazos / MSI' &&
+      (t.date || '').startsWith(monthStr)
+    );
+    const abonoTx = txs.find(t =>
+      t.installmentId === instId &&
+      t.type === 'income' &&
+      (t.date || '').startsWith(monthStr)
+    );
+
+    const amount = inst.monthlyAmount;
+    const accounts = Storage.getAccounts();
+
+    if (gastoTx) {
+      const src = accounts.find(a => a.id === gastoTx.accountId);
+      if (src) src.balance = (src.balance || 0) + amount; // revertir gasto
+    }
+    if (abonoTx) {
+      const tc = accounts.find(a => a.id === abonoTx.accountId);
+      if (tc) tc.balance = (tc.balance || 0) + amount; // revertir abono TC
+    }
+
+    Storage.saveAccounts(accounts);
+    Storage.saveTransactions(txs.filter(t => t !== gastoTx && t !== abonoTx));
+
+    // Quitar mes de paidMonths
+    installments[idx].paidMonths = (installments[idx].paidMonths || []).filter(m => m !== monthStr);
+    installments[idx].archived = false; // reactivar si estaba archivado
+    Storage.saveInstallments(installments);
+
+    App.toast(`Pago de ${Storage.formatMonth(monthStr)} deshecho`, 'success');
+    // Reabrir el modal con datos actualizados
+    const updated = Storage.getInstallments().find(x => x.id === instId);
+    if (updated) _renderScheduleModal(updated);
+    render();
+    App.renderDashboard();
   }
 
   /* ─── Estado de Cuenta (tarjeta + mes) ─── */
