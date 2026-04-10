@@ -84,6 +84,7 @@ const App = (() => {
     }
 
     loadingEl.style.display = 'none';
+    document.getElementById('login-screen').style.display = 'none';
     document.getElementById('app').style.display = 'flex';
 
     // Mostrar email del usuario en el sidebar
