@@ -595,39 +595,43 @@ const Loans = (() => {
   function _del(loanId) {
     const loan = Storage.getLoans().find(l => l.id === loanId);
     if (!loan) return;
-    if (!confirm(`¿Eliminar el préstamo a ${loan.personName} por ${fmt(loan.amount)}?\nSe revertirán los efectos en los saldos.`)) return;
+    if (!confirm(`¿Eliminar el préstamo a ${loan.personName} por ${fmt(loan.amount)}?\nSe revertirán los efectos en los saldos y se eliminarán los movimientos.`)) return;
 
     const accs = Storage.getAccounts();
-    const src  = accs.findIndex(a => a.id === loan.fromAccountId);
-    if (src !== -1) {
-      const a = accs[src];
-      a.balance = a.type === 'credit'
-        ? Math.max(0, (a.balance || 0) - loan.amount)
-        : (a.balance || 0) + _owed(loan);
-    }
-    _realPays(loan).forEach(p => {
-      if (!p.toAccountId) return;
-      const i = accs.findIndex(a => a.id === p.toAccountId);
-      if (i !== -1) {
-        const a = accs[i];
-        a.balance = a.type === 'credit'
-          ? (a.balance || 0) + p.amount
-          : (a.balance || 0) - p.amount;
+    const allTxs = Storage.getTransactions();
+    const personLower = loan.personName.toLowerCase();
+
+    const loanTxs = allTxs.filter(t => {
+      if (t.category !== 'Préstamos') return false;
+      const desc = (t.description || '').toLowerCase();
+      // tx del préstamo inicial
+      if (t.type === 'expense' && Math.abs(t.amount - loan.amount) < 0.01 && desc.includes(personLower)) return true;
+      // tx de cobros
+      if (t.type === 'income' && desc.includes(personLower)) return true;
+      return false;
+    });
+
+    // Revertir saldos de cada transacción encontrada
+    loanTxs.forEach(t => {
+      const acc = accs.find(a => a.id === t.accountId);
+      if (!acc) return;
+      if (t.type === 'expense') {
+        // Era gasto de la cuenta origen → devolver dinero
+        acc.balance = acc.type === 'credit'
+          ? Math.max(0, (acc.balance || 0) - t.amount)
+          : (acc.balance || 0) + t.amount;
+      } else if (t.type === 'income') {
+        // Era cobro recibido → quitar dinero
+        acc.balance = acc.type === 'credit'
+          ? (acc.balance || 0) + t.amount
+          : (acc.balance || 0) - t.amount;
       }
     });
+
     Storage.saveAccounts(accs);
-
-    // Eliminar movimientos: coincide por descripción y categoría
-    const personNameLower = loan.personName.toLowerCase();
-    const filtered = Storage.getTransactions().filter(t => {
-      if (t.category !== 'Préstamos') return true;
-      const desc = (t.description || '').toLowerCase();
-      return !desc.includes(personNameLower) ||
-             Math.abs(t.amount - loan.amount) > 0.01 && t.type !== 'income';
-    });
-    Storage.saveTransactions(filtered);
-
+    Storage.saveTransactions(allTxs.filter(t => !loanTxs.includes(t)));
     Storage.saveLoans(Storage.getLoans().filter(l => l.id !== loanId));
+
     App.toast('Préstamo eliminado', 'success');
     render();
     App.renderDashboard();
