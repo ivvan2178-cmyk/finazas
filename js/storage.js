@@ -99,7 +99,7 @@ const Storage = (() => {
   /** Recalcula acc.balance = initialBalance + efectos de transacciones. */
   function _recomputeBalances() {
     _cache.accounts.forEach(acc => {
-      acc.balance = (acc.initialBalance || 0) + _txEffect(acc.id, acc.type, _cache.transactions);
+      acc.balance = Math.round(((acc.initialBalance || 0) + _txEffect(acc.id, acc.type, _cache.transactions)) * 100) / 100;
     });
   }
 
