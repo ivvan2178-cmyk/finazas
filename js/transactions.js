@@ -316,14 +316,10 @@ const Transactions = (() => {
       App.toast('Selecciona cuentas distintas para la transferencia', 'error'); return;
     }
 
-    const accounts = Storage.getAccounts();
     const transactions = Storage.getTransactions();
     const txData = { type, date, amount, accountId, toAccountId, category, description, nota, installmentId: null };
 
     if (idVal) {
-      // Edit: undo old effect first
-      const old = transactions.find(x => x.id === idVal);
-      if (old) _undoEffect(old, accounts);
       const idx = transactions.findIndex(x => x.id === idVal);
       if (idx > -1) transactions[idx] = { ...transactions[idx], ...txData };
     } else {
@@ -331,9 +327,7 @@ const Transactions = (() => {
       transactions.push(txData);
     }
 
-    // Apply balance effect
-    _applyEffect(txData, accounts);
-    Storage.saveAccounts(accounts);
+    // saveTransactions recomputa saldos automáticamente
     Storage.saveTransactions(transactions);
 
     App.closeModal();
@@ -342,54 +336,10 @@ const Transactions = (() => {
     App.renderDashboard();
   }
 
-  function _applyEffect(t, accounts) {
-    const src = accounts.find(a => a.id === t.accountId);
-    const dst = t.toAccountId ? accounts.find(a => a.id === t.toAccountId) : null;
-
-    if (!src) return;
-    if (t.type === 'income') {
-      if (src.type === 'credit') src.balance -= t.amount; // paying credit with income
-      else src.balance += t.amount;
-    } else if (t.type === 'expense') {
-      if (src.type === 'credit') src.balance += t.amount; // credit: increases debt
-      else src.balance -= t.amount;
-    } else if (t.type === 'transfer' && dst) {
-      // Source loses money (or credit debt increases)
-      if (src.type === 'credit') src.balance += t.amount;
-      else src.balance -= t.amount;
-      // Destination gains money (or credit debt decreases)
-      if (dst.type === 'credit') dst.balance -= t.amount;
-      else dst.balance += t.amount;
-    }
-  }
-
-  function _undoEffect(t, accounts) {
-    const src = accounts.find(a => a.id === t.accountId);
-    const dst = t.toAccountId ? accounts.find(a => a.id === t.toAccountId) : null;
-
-    if (!src) return;
-    if (t.type === 'income') {
-      if (src.type === 'credit') src.balance += t.amount;
-      else src.balance -= t.amount;
-    } else if (t.type === 'expense') {
-      if (src.type === 'credit') src.balance -= t.amount;
-      else src.balance += t.amount;
-    } else if (t.type === 'transfer' && dst) {
-      if (src.type === 'credit') src.balance -= t.amount;
-      else src.balance += t.amount;
-      if (dst.type === 'credit') dst.balance += t.amount;
-      else dst.balance -= t.amount;
-    }
-  }
-
   function deleteTransaction(id) {
     if (!confirm('¿Eliminar este movimiento?')) return;
     const transactions = Storage.getTransactions();
-    const t = transactions.find(x => x.id === id);
-    if (!t) return;
-    const accounts = Storage.getAccounts();
-    _undoEffect(t, accounts);
-    Storage.saveAccounts(accounts);
+    if (!transactions.find(x => x.id === id)) return;
     Storage.saveTransactions(transactions.filter(x => x.id !== id));
     App.toast('Movimiento eliminado', 'success');
     _renderList();

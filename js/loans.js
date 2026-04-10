@@ -271,17 +271,6 @@ const Loans = (() => {
     if (!fromAccountId)        { App.toast('Selecciona la cuenta origen', 'error'); return; }
     if (!date)                 { App.toast('Selecciona la fecha', 'error'); return; }
 
-    // Decrease source account balance
-    const accs = Storage.getAccounts();
-    const idx  = accs.findIndex(a => a.id === fromAccountId);
-    if (idx !== -1) {
-      const a = accs[idx];
-      a.balance = a.type === 'credit'
-        ? (a.balance || 0) + amount
-        : (a.balance || 0) - amount;
-      Storage.saveAccounts(accs);
-    }
-
     const loanId = uid();
     let payments = [];
 
@@ -402,7 +391,6 @@ const Loans = (() => {
     if (idx === -1) return;
 
     const oldLoan  = loans[idx];
-    const oldAmount = oldLoan.amount;
     const plan     = _getPlan(oldLoan);
 
     // Actualizar plan si existe
@@ -418,20 +406,6 @@ const Loans = (() => {
 
     loans[idx] = { ...oldLoan, personName, amount, fromAccountId, date, dueDate, description, note, payments };
     Storage.saveLoans(loans);
-
-    // Ajustar balance de la cuenta si cambió el monto
-    const diff = amount - oldAmount;
-    if (Math.abs(diff) > 0.001) {
-      const accs = Storage.getAccounts();
-      const ai   = accs.findIndex(a => a.id === fromAccountId);
-      if (ai !== -1) {
-        const a = accs[ai];
-        a.balance = a.type === 'credit'
-          ? (a.balance || 0) + diff
-          : (a.balance || 0) - diff;
-        Storage.saveAccounts(accs);
-      }
-    }
 
     App.closeModal();
     App.toast('Préstamo actualizado', 'success');
@@ -503,19 +477,6 @@ const Loans = (() => {
     if (!amount || amount <= 0)   { App.toast('El monto debe ser mayor a 0', 'error'); return; }
     if (amount > maxOwed + 0.001) { App.toast(`No puede exceder ${fmt(maxOwed)}`, 'error'); return; }
     if (!date)                    { App.toast('Selecciona la fecha', 'error'); return; }
-
-    // Increase target account balance
-    if (toAccountId) {
-      const accs = Storage.getAccounts();
-      const idx  = accs.findIndex(a => a.id === toAccountId);
-      if (idx !== -1) {
-        const a = accs[idx];
-        a.balance = a.type === 'credit'
-          ? Math.max(0, (a.balance || 0) - amount)
-          : (a.balance || 0) + amount;
-        Storage.saveAccounts(accs);
-      }
-    }
 
     const loans = Storage.getLoans();
     const li = loans.findIndex(l => l.id === loanId);
@@ -597,38 +558,18 @@ const Loans = (() => {
     if (!loan) return;
     if (!confirm(`¿Eliminar el préstamo a ${loan.personName} por ${fmt(loan.amount)}?\nSe revertirán los efectos en los saldos y se eliminarán los movimientos.`)) return;
 
-    const accs = Storage.getAccounts();
     const allTxs = Storage.getTransactions();
     const personLower = loan.personName.toLowerCase();
 
     const loanTxs = allTxs.filter(t => {
       if (t.category !== 'Préstamos') return false;
       const desc = (t.description || '').toLowerCase();
-      // tx del préstamo inicial
       if (t.type === 'expense' && Math.abs(t.amount - loan.amount) < 0.01 && desc.includes(personLower)) return true;
-      // tx de cobros
       if (t.type === 'income' && desc.includes(personLower)) return true;
       return false;
     });
 
-    // Revertir saldos de cada transacción encontrada
-    loanTxs.forEach(t => {
-      const acc = accs.find(a => a.id === t.accountId);
-      if (!acc) return;
-      if (t.type === 'expense') {
-        // Era gasto de la cuenta origen → devolver dinero
-        acc.balance = acc.type === 'credit'
-          ? Math.max(0, (acc.balance || 0) - t.amount)
-          : (acc.balance || 0) + t.amount;
-      } else if (t.type === 'income') {
-        // Era cobro recibido → quitar dinero
-        acc.balance = acc.type === 'credit'
-          ? (acc.balance || 0) + t.amount
-          : (acc.balance || 0) - t.amount;
-      }
-    });
-
-    Storage.saveAccounts(accs);
+    // saveTransactions recomputa saldos automáticamente
     Storage.saveTransactions(allTxs.filter(t => !loanTxs.includes(t)));
     Storage.saveLoans(Storage.getLoans().filter(l => l.id !== loanId));
 

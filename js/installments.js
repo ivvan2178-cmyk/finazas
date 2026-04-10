@@ -332,7 +332,6 @@ const Installments = (() => {
 
         // Si cambió el monto total, actualizar la transacción inicial y el saldo de la TC
         if (Math.abs(totalAmount - oldTotal) > 0.001) {
-          const diff = totalAmount - oldTotal;
           const txs = Storage.getTransactions();
           const initTx = txs.find(t =>
             t.installmentId === id &&
@@ -341,12 +340,7 @@ const Installments = (() => {
             Math.abs(t.amount - oldTotal) < 0.01
           );
           if (initTx) initTx.amount = totalAmount;
-          Storage.saveTransactions(txs);
-
-          const accounts = Storage.getAccounts();
-          const tc = accounts.find(a => a.id === accountId);
-          if (tc) tc.balance = (tc.balance || 0) + diff;
-          Storage.saveAccounts(accounts);
+          Storage.saveTransactions(txs); // recomputa saldos automáticamente
         }
       }
     } else {
@@ -373,11 +367,6 @@ const Installments = (() => {
       };
       const transactions = Storage.getTransactions();
       transactions.push(tx);
-      // Actualizar balance de la TC
-      const accounts = Storage.getAccounts();
-      const tcAccount = accounts.find(a => a.id === accountId);
-      if (tcAccount) tcAccount.balance = (tcAccount.balance || 0) + totalAmount;
-      Storage.saveAccounts(accounts);
       Storage.saveTransactions(transactions);
     }
 
@@ -394,13 +383,7 @@ const Installments = (() => {
     const inst = Storage.getInstallments().find(x => x.id === id);
     if (!inst) return;
 
-    // Revertir el cargo inicial en la TC
-    const accounts = Storage.getAccounts();
-    const tcAccount = accounts.find(a => a.id === inst.accountId);
-    if (tcAccount) tcAccount.balance = Math.max(0, (tcAccount.balance || 0) - inst.totalAmount);
-    Storage.saveAccounts(accounts);
-
-    // Eliminar la transacción de cargo inicial y cualquier pago registrado
+    // Eliminar todas las transacciones del plazo (recomputa saldos automáticamente)
     const txs = Storage.getTransactions().filter(t => t.installmentId !== id);
     Storage.saveTransactions(txs);
 
@@ -479,7 +462,6 @@ const Installments = (() => {
     const amount = inst.monthlyAmount;
     const date   = monthStr + '-01';
     const transactions = Storage.getTransactions();
-    const accounts     = Storage.getAccounts();
 
     // 1. Gasto en cuenta de origen (cuenta en presupuesto ese mes)
     const txGasto = {
@@ -505,14 +487,6 @@ const Installments = (() => {
     };
 
     transactions.push(txGasto, txAbono);
-
-    // Actualizar balances
-    const srcAccount = accounts.find(a => a.id === fromAccountId);
-    const tcAccount  = accounts.find(a => a.id === inst.accountId);
-    if (srcAccount) srcAccount.balance = (srcAccount.balance || 0) - amount;
-    if (tcAccount)  tcAccount.balance  = Math.max(0, (tcAccount.balance || 0) - amount);
-
-    Storage.saveAccounts(accounts);
     Storage.saveTransactions(transactions);
 
     // Marcar mes como pagado en el plazo
@@ -621,7 +595,6 @@ const Installments = (() => {
     const installments = Storage.getInstallments();
     const idx = installments.findIndex(x => x.id === instId);
     if (idx === -1) return;
-    const inst = installments[idx];
 
     // Eliminar las transacciones (gasto origen + abono TC) de ese mes
     const txs = Storage.getTransactions();
@@ -639,19 +612,7 @@ const Installments = (() => {
       (t.date || '').startsWith(monthStr)
     );
 
-    const amount = inst.monthlyAmount;
-    const accounts = Storage.getAccounts();
-
-    if (gastoTx) {
-      const src = accounts.find(a => a.id === gastoTx.accountId);
-      if (src) src.balance = (src.balance || 0) + amount; // revertir gasto
-    }
-    if (abonoTx) {
-      const tc = accounts.find(a => a.id === abonoTx.accountId);
-      if (tc) tc.balance = (tc.balance || 0) + amount; // revertir abono TC
-    }
-
-    Storage.saveAccounts(accounts);
+    // saveTransactions recomputa saldos automáticamente
     Storage.saveTransactions(txs.filter(t => t !== gastoTx && t !== abonoTx));
 
     // Quitar mes de paidMonths

@@ -75,6 +75,50 @@ const Storage = (() => {
     } catch { /* quota exceeded — ignorar */ }
   }
 
+  /* ──────────────────────────────────────
+     Cálculo de saldos desde transacciones
+  ────────────────────────────────────── */
+
+  /** Efecto neto de las transacciones sobre una cuenta. */
+  function _txEffect(accId, accType, txs) {
+    let e = 0;
+    txs.forEach(t => {
+      const src = t.accountId === accId;
+      const dst = t.toAccountId === accId;
+      if (!src && !dst) return;
+      if (src) {
+        if (t.type === 'income')   e += accType === 'credit' ? -t.amount :  t.amount;
+        if (t.type === 'expense')  e += accType === 'credit' ?  t.amount : -t.amount;
+        if (t.type === 'transfer') e += accType === 'credit' ?  t.amount : -t.amount;
+      }
+      if (dst && t.type === 'transfer') e += accType === 'credit' ? -t.amount : t.amount;
+    });
+    return e;
+  }
+
+  /** Recalcula acc.balance = initialBalance + efectos de transacciones. */
+  function _recomputeBalances() {
+    _cache.accounts.forEach(acc => {
+      acc.balance = (acc.initialBalance || 0) + _txEffect(acc.id, acc.type, _cache.transactions);
+    });
+  }
+
+  /** Versión pública para que otros módulos puedan forzar recálculo. */
+  function recomputeBalances() { _recomputeBalances(); }
+
+  /** Columnas válidas de accounts en Supabase (sin balance, que es calculado). */
+  const _ACC_COLS = new Set(['id','name','type','initialBalance','color','creditLimit','cutoffDay','paymentDay']);
+  function _packAccount(a) {
+    const r = {};
+    _ACC_COLS.forEach(k => { if (a[k] !== undefined) r[k] = a[k]; });
+    return r;
+  }
+
+  /** Expone txEffect para que accounts.js pueda calcular initialBalance al editar. */
+  function getTxEffect(accId, accType) {
+    return _txEffect(accId, accType, _cache.transactions);
+  }
+
   /** Carga todos los datos desde Supabase al caché. Async. */
   async function loadAll() {
     const _timeout = new Promise((_, reject) =>
@@ -104,10 +148,28 @@ const Storage = (() => {
     if (authError) throw authError;
     [e1, e2, e3, e4, e5].forEach(e => e && console.warn('[Storage] loadAll warning:', e.message));
 
-    _cache.accounts     = accounts || [];
     _cache.transactions = (transactions || []).map(_deriveTxFlags);
     _cache.installments = (installments || []).map(i => _deriveInstallmentData(i, _cache.transactions));
     _cache.loans        = loans || [];
+
+    // Migrar initialBalance si es la primera vez (balance actual - efectos de txs)
+    _cache.accounts = (accounts || []).map(acc => {
+      if (acc.initialBalance == null) {
+        const effect = _txEffect(acc.id, acc.type, _cache.transactions);
+        return { ...acc, initialBalance: (acc.balance || 0) - effect };
+      }
+      return acc;
+    });
+
+    // Guardar initialBalance migrado en Supabase (una sola vez)
+    const needsMigration = _cache.accounts.filter((_, i) => (accounts||[])[i]?.initialBalance == null);
+    if (needsMigration.length) {
+      _save(async () => {
+        await _db.from('accounts').upsert(needsMigration.map(_packAccount));
+      });
+    }
+
+    _recomputeBalances();
 
     const settings = {};
     (settingsRows || []).forEach(r => { settings[r.key] = r.value; });
@@ -228,11 +290,12 @@ const Storage = (() => {
   function saveAccounts(newData) {
     const deleted = _cache.accounts.map(a => a.id).filter(id => !newData.some(a => a.id === id));
     _cache.accounts = [...newData];
+    _recomputeBalances();
     _saveToLocalCache();
     _save(async () => {
       if (deleted.length) await _db.from('accounts').delete().in('id', deleted);
       if (newData.length) {
-        const { error } = await _db.from('accounts').upsert(newData);
+        const { error } = await _db.from('accounts').upsert(newData.map(_packAccount));
         if (error) throw error;
       }
     });
@@ -291,6 +354,7 @@ const Storage = (() => {
   function saveTransactions(newData) {
     const deleted = _cache.transactions.map(t => t.id).filter(id => !newData.some(t => t.id === id));
     _cache.transactions = [...newData];
+    _recomputeBalances();  // saldos siempre consistentes con las transacciones
     _saveToLocalCache();
     _save(async () => {
       if (deleted.length) await _db.from('transactions').delete().in('id', deleted);
@@ -536,6 +600,7 @@ const Storage = (() => {
   /* ── Expose ── */
   return {
     setup, loadAll, loadFromLocalCache: _loadFromLocalCache, isSyncing, migrateFromLocalStorage,
+    recomputeBalances, getTxEffect,
     signIn, signUp, signOut, getUser, getSession, onAuthStateChange,
     getAccounts, saveAccounts,
     getTransactions, saveTransactions,

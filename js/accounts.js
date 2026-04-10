@@ -211,7 +211,7 @@ const Accounts = (() => {
         </div>
         <div class="form-group">
           <label id="acc-balance-label">${isCredit ? 'Deuda actual (MXN)' : 'Saldo (MXN)'}</label>
-          <input id="acc-balance" type="number" class="form-input" value="${a.balance || 0}" min="0" step="0.01" />
+          <input id="acc-balance" type="number" class="form-input" value="${a.initialBalance ?? a.balance ?? 0}" min="0" step="0.01" />
         </div>
         <div class="form-group" id="acc-limit-group" style="display:${isCredit?'':'none'}">
           <label>Límite de crédito (MXN)</label>
@@ -257,7 +257,7 @@ const Accounts = (() => {
     const accountData = {
       name,
       type,
-      balance,
+      initialBalance: balance,
       color,
       creditLimit: isCredit ? (parseFloat(document.getElementById('acc-limit').value) || 0) : null,
       cutoffDay: isCredit ? (parseInt(document.getElementById('acc-cutoff').value) || 15) : null,
