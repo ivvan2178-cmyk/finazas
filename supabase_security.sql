@@ -1,8 +1,16 @@
 -- Seguridad: restringir acceso solo a usuarios autenticados
 -- Ejecuta en: Supabase → SQL Editor
--- Esto reemplaza las políticas "anon_all" por "auth_only"
 
--- Eliminar políticas anteriores (anon = cualquiera sin login)
+-- Crear tabla settings si no existe
+create table if not exists settings (
+  key   text primary key,
+  value jsonb
+);
+
+-- Activar RLS en settings (por si no estaba)
+alter table settings enable row level security;
+
+-- Eliminar políticas anteriores
 drop policy if exists "anon_all" on accounts;
 drop policy if exists "anon_all" on transactions;
 drop policy if exists "anon_all" on installments;
