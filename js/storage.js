@@ -484,6 +484,11 @@ const Storage = (() => {
     return user;
   }
 
+  async function getSession() {
+    const { data: { session } } = await _db.auth.getSession();
+    return session;
+  }
+
   function onAuthStateChange(callback) {
     return _db.auth.onAuthStateChange(callback);
   }
@@ -491,7 +496,7 @@ const Storage = (() => {
   /* ── Expose ── */
   return {
     setup, loadAll, isSyncing, migrateFromLocalStorage,
-    signIn, signUp, signOut, getUser, onAuthStateChange,
+    signIn, signUp, signOut, getUser, getSession, onAuthStateChange,
     getAccounts, saveAccounts,
     getTransactions, saveTransactions,
     getInstallments, saveInstallments,

@@ -17,26 +17,25 @@ const App = (() => {
       return;
     }
 
-    // Asegurarse de que login esté oculto y loading visible mientras se verifica la sesión
+    // Mantener loading visible, login oculto mientras se verifica sesión
     document.getElementById('login-screen').style.display = 'none';
     document.getElementById('app-loading').style.display = 'flex';
 
-    // Fallback: si onAuthStateChange no responde en 5s, mostrar login
-    const _authTimeout = setTimeout(() => {
-      document.getElementById('app-loading').style.display = 'none';
-      _showLogin();
-    }, 5000);
+    // Verificar sesión existente directamente (evita el flash del login)
+    const existingSession = await Storage.getSession();
+    if (existingSession) {
+      await _bootApp();
+      return;
+    }
 
-    // onAuthStateChange en v2 dispara INITIAL_SESSION al cargar la página
+    // Sin sesión activa → mostrar login directamente
+    document.getElementById('app-loading').style.display = 'none';
+    _showLogin();
+
+    // Escuchar futuros cambios de sesión (login/logout)
     Storage.onAuthStateChange(async (event, session) => {
-      clearTimeout(_authTimeout);
-      if (event === 'INITIAL_SESSION' || event === 'SIGNED_IN') {
-        if (session) {
-          await _bootApp();
-        } else {
-          document.getElementById('app-loading').style.display = 'none';
-          _showLogin();
-        }
+      if (event === 'SIGNED_IN' && session) {
+        await _bootApp();
       }
       if (event === 'SIGNED_OUT') {
         document.getElementById('app-loading').style.display = 'none';
