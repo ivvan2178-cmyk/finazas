@@ -41,10 +41,44 @@ const Storage = (() => {
     _db = window.supabase.createClient(url, key);
   }
 
+  const _LS_CACHE_KEY = 'fz_cache_v1';
+
+  /** Carga caché local (instantáneo) si existe. Devuelve true si había datos. */
+  function _loadFromLocalCache() {
+    try {
+      const raw = localStorage.getItem(_LS_CACHE_KEY);
+      if (!raw) return false;
+      const c = JSON.parse(raw);
+      _cache.accounts     = c.accounts     || [];
+      _cache.transactions = (c.transactions || []).map(_deriveTxFlags);
+      _cache.installments = (c.installments || []).map(i => _deriveInstallmentData(i, _cache.transactions));
+      _cache.loans        = c.loans        || [];
+      _cache.expenseCats  = c.expenseCats  || [...DEFAULT_EXPENSE_CATS];
+      _cache.incomeCats   = c.incomeCats   || [...DEFAULT_INCOME_CATS];
+      _cache.budgets      = c.budgets      || {};
+      return true;
+    } catch { return false; }
+  }
+
+  /** Persiste el caché actual en localStorage. */
+  function _saveToLocalCache() {
+    try {
+      localStorage.setItem(_LS_CACHE_KEY, JSON.stringify({
+        accounts:     _cache.accounts,
+        transactions: _cache.transactions,
+        installments: _cache.installments,
+        loans:        _cache.loans,
+        expenseCats:  _cache.expenseCats,
+        incomeCats:   _cache.incomeCats,
+        budgets:      _cache.budgets,
+      }));
+    } catch { /* quota exceeded — ignorar */ }
+  }
+
   /** Carga todos los datos desde Supabase al caché. Async. */
   async function loadAll() {
     const _timeout = new Promise((_, reject) =>
-      setTimeout(() => reject(new Error('loadAll timeout: Supabase no respondió en 8s')), 8000)
+      setTimeout(() => reject(new Error('loadAll timeout')), 8000)
     );
 
     const results = await Promise.race([
@@ -68,16 +102,13 @@ const Storage = (() => {
 
     const authError = [e1, e2, e3, e4, e5].find(e => e && (e.status === 401 || e.message?.includes('JWT') || e.message?.includes('not authorized')));
     if (authError) throw authError;
-    // Errores no-auth: loguear pero no bloquear la carga (ej. schema cache desactualizado)
     [e1, e2, e3, e4, e5].forEach(e => e && console.warn('[Storage] loadAll warning:', e.message));
 
     _cache.accounts     = accounts || [];
-    // Derivar flags a partir de los datos originales (sin columnas extra)
     _cache.transactions = (transactions || []).map(_deriveTxFlags);
     _cache.installments = (installments || []).map(i => _deriveInstallmentData(i, _cache.transactions));
     _cache.loans        = loans || [];
 
-    // settings → categorías y presupuestos
     const settings = {};
     (settingsRows || []).forEach(r => { settings[r.key] = r.value; });
 
@@ -85,7 +116,6 @@ const Storage = (() => {
     _cache.incomeCats  = settings.income_cats   || [...DEFAULT_INCOME_CATS];
     _cache.budgets     = settings.budgets       || {};
 
-    // Sembrar categorías por defecto si es la primera vez
     if (!settings.expense_cats) {
       _save(async () => {
         await _db.from('settings').upsert([
@@ -94,6 +124,9 @@ const Storage = (() => {
         ]);
       });
     }
+
+    // Guardar en caché local para la próxima carga
+    _saveToLocalCache();
   }
 
   /* ══════════════════════════════════════
@@ -495,7 +528,7 @@ const Storage = (() => {
 
   /* ── Expose ── */
   return {
-    setup, loadAll, isSyncing, migrateFromLocalStorage,
+    setup, loadAll, loadFromLocalCache: _loadFromLocalCache, isSyncing, migrateFromLocalStorage,
     signIn, signUp, signOut, getUser, getSession, onAuthStateChange,
     getAccounts, saveAccounts,
     getTransactions, saveTransactions,

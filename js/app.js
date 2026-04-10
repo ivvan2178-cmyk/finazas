@@ -59,6 +59,31 @@ const App = (() => {
       return;
     }
 
+    // Si hay caché local, mostrar la app inmediatamente sin esperar a Supabase
+    const hasCachedData = Storage.loadFromLocalCache();
+
+    if (hasCachedData) {
+      loadingEl.style.display = 'none';
+      document.getElementById('login-screen').style.display = 'none';
+      document.getElementById('app').style.display = 'flex';
+      _setupNav();
+      _setupGlobalListeners();
+      _appInitialized = true;
+      navigate('dashboard');
+      // Sincronizar con Supabase en background
+      Storage.loadAll().then(() => {
+        renderDashboard();
+        if (typeof Transactions !== 'undefined') Transactions._renderList?.();
+      }).catch(err => console.warn('[App] Sync background error:', err));
+      // Mostrar email
+      Storage.getUser().then(user => {
+        const el = document.getElementById('sidebar-user-email');
+        if (el && user) el.textContent = user.email;
+      });
+      return;
+    }
+
+    // Sin caché: cargar desde Supabase normalmente
     loadingEl.style.display = 'flex';
 
     try {
@@ -69,7 +94,6 @@ const App = (() => {
       }
     } catch (err) {
       console.error('[App] Error al cargar datos:', err);
-      // Si es error de autenticación, limpiar sesión y mostrar login
       if (err?.status === 401 || err?.message?.includes('401') || err?.message?.includes('JWT')) {
         await Storage.signOut().catch(() => {});
         loadingEl.style.display = 'none';
