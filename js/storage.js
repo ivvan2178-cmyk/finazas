@@ -228,6 +228,7 @@ const Storage = (() => {
   function saveAccounts(newData) {
     const deleted = _cache.accounts.map(a => a.id).filter(id => !newData.some(a => a.id === id));
     _cache.accounts = [...newData];
+    _saveToLocalCache();
     _save(async () => {
       if (deleted.length) await _db.from('accounts').delete().in('id', deleted);
       if (newData.length) {
@@ -290,6 +291,7 @@ const Storage = (() => {
   function saveTransactions(newData) {
     const deleted = _cache.transactions.map(t => t.id).filter(id => !newData.some(t => t.id === id));
     _cache.transactions = [...newData];
+    _saveToLocalCache();
     _save(async () => {
       if (deleted.length) await _db.from('transactions').delete().in('id', deleted);
       if (newData.length) {
@@ -307,6 +309,7 @@ const Storage = (() => {
   function saveInstallments(newData) {
     const deleted = _cache.installments.map(i => i.id).filter(id => !newData.some(i => i.id === id));
     _cache.installments = [...newData];
+    _saveToLocalCache();
     _save(async () => {
       if (deleted.length) await _db.from('installments').delete().in('id', deleted);
       if (newData.length) {
@@ -324,6 +327,7 @@ const Storage = (() => {
   function saveLoans(newData) {
     const deleted = _cache.loans.map(l => l.id).filter(id => !newData.some(l => l.id === id));
     _cache.loans = [...newData];
+    _saveToLocalCache();
     _save(async () => {
       if (deleted.length) await _db.from('loans').delete().in('id', deleted);
       if (newData.length) {
@@ -341,6 +345,7 @@ const Storage = (() => {
 
   function saveExpenseCategories(cats) {
     _cache.expenseCats = [...cats];
+    _saveToLocalCache();
     _save(async () => {
       const { error } = await _db.from('settings').upsert({ key: 'expense_cats', value: cats });
       if (error) throw error;
@@ -349,6 +354,7 @@ const Storage = (() => {
 
   function saveIncomeCategories(cats) {
     _cache.incomeCats = [...cats];
+    _saveToLocalCache();
     _save(async () => {
       const { error } = await _db.from('settings').upsert({ key: 'income_cats', value: cats });
       if (error) throw error;
@@ -364,6 +370,7 @@ const Storage = (() => {
 
   function saveBudgetForMonth(monthStr, limits) {
     _cache.budgets = { ..._cache.budgets, [monthStr]: { ...limits } };
+    _saveToLocalCache();
     const snapshot = { ..._cache.budgets };
     _save(async () => {
       const { error } = await _db.from('settings').upsert({ key: 'budgets', value: snapshot });
