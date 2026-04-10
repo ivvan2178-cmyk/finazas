@@ -21,18 +21,7 @@ const App = (() => {
     document.getElementById('login-screen').style.display = 'none';
     document.getElementById('app-loading').style.display = 'flex';
 
-    // Verificar sesión existente directamente (evita el flash del login)
-    const existingSession = await Storage.getSession();
-    if (existingSession) {
-      await _bootApp();
-      return;
-    }
-
-    // Sin sesión activa → mostrar login directamente
-    document.getElementById('app-loading').style.display = 'none';
-    _showLogin();
-
-    // Escuchar futuros cambios de sesión (login/logout)
+    // Siempre escuchar cambios de sesión (login, logout, refresco)
     Storage.onAuthStateChange(async (event, session) => {
       if (event === 'SIGNED_IN' && session) {
         await _bootApp();
@@ -42,6 +31,17 @@ const App = (() => {
         _showLogin();
       }
     });
+
+    // Verificar sesión existente directamente (evita el flash del login al refrescar)
+    const existingSession = await Storage.getSession();
+    if (existingSession) {
+      await _bootApp();
+      return;
+    }
+
+    // Sin sesión activa → mostrar login
+    document.getElementById('app-loading').style.display = 'none';
+    _showLogin();
   }
 
   /* ─── Boot (carga datos y muestra la app) ─── */
