@@ -41,7 +41,7 @@ const Storage = (() => {
     _db = window.supabase.createClient(url, key);
   }
 
-  const _LS_CACHE_KEY = 'fz_cache_v1';
+  const _LS_CACHE_KEY = 'fz_cache_v2';
 
   /** Carga caché local (instantáneo) si existe. Devuelve true si había datos. */
   function _loadFromLocalCache() {
