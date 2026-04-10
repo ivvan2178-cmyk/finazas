@@ -17,11 +17,15 @@ const App = (() => {
       return;
     }
 
-    // Fallback: si onAuthStateChange no responde en 10s, mostrar login
+    // Asegurarse de que login esté oculto y loading visible mientras se verifica la sesión
+    document.getElementById('login-screen').style.display = 'none';
+    document.getElementById('app-loading').style.display = 'flex';
+
+    // Fallback: si onAuthStateChange no responde en 5s, mostrar login
     const _authTimeout = setTimeout(() => {
       document.getElementById('app-loading').style.display = 'none';
       _showLogin();
-    }, 10000);
+    }, 5000);
 
     // onAuthStateChange en v2 dispara INITIAL_SESSION al cargar la página
     Storage.onAuthStateChange(async (event, session) => {

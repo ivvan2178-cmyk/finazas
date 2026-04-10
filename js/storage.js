@@ -44,7 +44,7 @@ const Storage = (() => {
   /** Carga todos los datos desde Supabase al caché. Async. */
   async function loadAll() {
     const _timeout = new Promise((_, reject) =>
-      setTimeout(() => reject(new Error('loadAll timeout: Supabase no respondió en 15s')), 15000)
+      setTimeout(() => reject(new Error('loadAll timeout: Supabase no respondió en 8s')), 8000)
     );
 
     const results = await Promise.race([
