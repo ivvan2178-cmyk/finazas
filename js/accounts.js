@@ -99,6 +99,21 @@ const Accounts = (() => {
       if (a.type === 'credit') debt += (a.balance || 0);
       else assets += (a.balance || 0);
     });
+
+    // Restar de la deuda los préstamos otorgados desde TCs (no son deuda propia)
+    if (typeof Loans !== 'undefined') {
+      const loans = Storage.getLoans();
+      loans.forEach(l => {
+        const src = accounts.find(a => a.id === l.fromAccountId);
+        if (src && src.type === 'credit') {
+          // El monto pendiente de cobrar de ese préstamo no es deuda real del usuario
+          const paid = (l.payments || []).filter(p => !p._plan).reduce((s, p) => s + p.amount, 0);
+          const owed = Math.max(0, l.amount - paid);
+          debt = Math.max(0, debt - owed);
+        }
+      });
+    }
+
     // Por cobrar (solo préstamos desde cuentas de capital) suma al patrimonio
     const owed = typeof Loans !== 'undefined' ? Loans.getTotalOwed() : 0;
     return { assets, debt, net: assets - debt + owed };
