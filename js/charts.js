@@ -21,7 +21,8 @@ const Charts = (() => {
     const canvas = document.getElementById(canvasId);
     if (!canvas) return;
 
-    const expenses = transactions.filter(t => t.type === 'expense');
+    const EXCLUDED_CATS = new Set(['Préstamos', 'Plazos / MSI']);
+    const expenses = transactions.filter(t => t.type === 'expense' && !EXCLUDED_CATS.has(t.category));
     if (!expenses.length) {
       const ctx = canvas.getContext('2d');
       ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -38,8 +39,9 @@ const Charts = (() => {
       catTotals[cat] = (catTotals[cat] || 0) + t.amount;
     });
 
-    const labels = Object.keys(catTotals);
-    const data = labels.map(l => catTotals[l]);
+    const sorted = Object.entries(catTotals).sort((a, b) => b[1] - a[1]);
+    const labels = sorted.map(e => e[0]);
+    const data = sorted.map(e => e[1]);
 
     _instances[canvasId] = new Chart(canvas, {
       type: 'doughnut',
