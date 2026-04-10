@@ -21,12 +21,17 @@ const App = (() => {
     document.getElementById('login-screen').style.display = 'none';
     document.getElementById('app-loading').style.display = 'flex';
 
-    // Siempre escuchar cambios de sesión (login, logout, refresco)
+    // Escuchar cambios de sesión
     Storage.onAuthStateChange(async (event, session) => {
-      if (event === 'SIGNED_IN' && session) {
+      if (event === 'SIGNED_IN' && session && !_appInitialized) {
+        // Login exitoso desde la pantalla de login
         await _bootApp();
       }
-      if (event === 'SIGNED_OUT') {
+      if (event === 'SIGNED_OUT' && _appInitialized) {
+        // Solo cerrar sesión si el usuario estaba dentro de la app
+        // (ignorar SIGNED_OUT espurios durante refresco de token)
+        _appInitialized = false;
+        document.getElementById('app').style.display = 'none';
         document.getElementById('app-loading').style.display = 'none';
         _showLogin();
       }
