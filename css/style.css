@@ -325,6 +325,7 @@ nav { padding: .6rem 0; flex: 1; }
 .acc-detail-row td { padding: .45rem .5rem; border-bottom: 1px solid var(--border); vertical-align: middle; }
 .acc-detail-row:last-child td { border-bottom: none; }
 .acc-detail-row:hover { background: var(--hover); }
+.acc-detail-related td { opacity: .55; font-style: italic; }
 
 /* ─── Transactions ─── */
 .tx-filters {

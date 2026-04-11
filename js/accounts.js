@@ -332,40 +332,69 @@ const Accounts = (() => {
     const isCredit = a.type === 'credit';
     const color = a.color || '#7c3aed';
 
-    const txs = Storage.getTransactions()
-      .filter(t => t.accountId === id || t.toAccountId === id)
+    const allTxs = Storage.getTransactions();
+
+    // Transacciones que afectan directamente el saldo de esta cuenta
+    const directIds = new Set();
+    allTxs.forEach(t => { if (t.accountId === id || t.toAccountId === id) directIds.add(t.id); });
+
+    // Cobros de préstamos cuyo préstamo salió de esta cuenta, aunque el cobro
+    // haya llegado a otra cuenta (solo para mostrar, no afectan el saldo aquí)
+    const relatedIds = new Set();
+    if (typeof Storage.getLoans === 'function') {
+      const loans = Storage.getLoans().filter(l => l.fromAccountId === id);
+      const cobroTxs = allTxs.filter(t => t.category === 'Préstamos' && t.type === 'income');
+      loans.forEach(loan => {
+        const pays = (loan.payments || []).filter(p => !p._plan);
+        pays.forEach(p => {
+          const match = cobroTxs.find(t =>
+            Math.abs(t.amount - p.amount) < 0.01 && t.date === p.date && !directIds.has(t.id)
+          );
+          if (match) relatedIds.add(match.id);
+        });
+      });
+    }
+
+    const txs = allTxs
+      .filter(t => directIds.has(t.id) || relatedIds.has(t.id))
       .sort((x, y) => (x.date || '').localeCompare(y.date || '') || (x.id || '').localeCompare(y.id || ''));
 
-    // Calcular efecto acumulado por transacción
+    // Calcular efecto acumulado (solo transacciones directas afectan el saldo)
     let running = a.initialBalance || 0;
     const rows = txs.map(t => {
+      const isDirect = directIds.has(t.id);
       const src = t.accountId === id;
       let effect = 0;
-      if (src) {
-        if (t.type === 'income')   effect = isCredit ? -t.amount :  t.amount;
-        if (t.type === 'expense')  effect = isCredit ?  t.amount : -t.amount;
-        if (t.type === 'transfer') effect = isCredit ?  t.amount : -t.amount;
-      } else {
-        // dst de transferencia
-        effect = isCredit ? -t.amount : t.amount;
+      if (isDirect) {
+        if (src) {
+          if (t.type === 'income')   effect = isCredit ? -t.amount :  t.amount;
+          if (t.type === 'expense')  effect = isCredit ?  t.amount : -t.amount;
+          if (t.type === 'transfer') effect = isCredit ?  t.amount : -t.amount;
+        } else {
+          effect = isCredit ? -t.amount : t.amount;
+        }
+        running = Math.round((running + effect) * 100) / 100;
       }
-      running = Math.round((running + effect) * 100) / 100;
 
       const typeIcon = t.type === 'income' ? 'fa-arrow-down' : t.type === 'expense' ? 'fa-arrow-up' : 'fa-arrows-left-right';
-      const effectClass = effect > 0 ? (isCredit ? 'text-danger' : 'text-success') : (isCredit ? 'text-success' : 'text-danger');
-      const effectSign = effect >= 0 ? '+' : '';
-      const label = t.isLoan ? 'Préstamo' : t.isLoanPayment ? 'Cobro' : t.isDebt ? 'Plazo' : (t.description || Storage.typeLabel(t.type));
+      const effectClass = effect > 0 ? (isCredit ? 'text-danger' : 'text-success') : effect < 0 ? (isCredit ? 'text-success' : 'text-danger') : 'text-muted';
+      const effectSign = effect > 0 ? '+' : '';
+      const label = t.isLoan ? 'Préstamo' : (t.isLoanPayment || (t.category === 'Préstamos' && t.type === 'income')) ? 'Cobro' : t.isDebt ? 'Plazo' : (t.description || Storage.typeLabel(t.type));
+      const destAccount = !isDirect ? `<span class="text-muted" style="font-size:.7rem"> → ${_esc(Accounts.getName(t.accountId))}</span>` : '';
+      const saldoCell = isDirect ? Storage.formatCurrency(running) : `<span class="text-muted">—</span>`;
 
       return `
-        <tr class="acc-detail-row">
+        <tr class="acc-detail-row${!isDirect ? ' acc-detail-related' : ''}">
           <td class="text-muted" style="white-space:nowrap">${Storage.formatDate(t.date)}</td>
           <td>
             <i class="fas ${typeIcon}" style="font-size:.7rem;margin-right:.3rem;opacity:.6"></i>
-            ${_esc(label)}
+            ${_esc(label)}${destAccount}
             ${t.category ? `<span class="tx-category" style="margin-left:.35rem">${_esc(t.category)}</span>` : ''}
           </td>
-          <td class="${effectClass}" style="text-align:right;white-space:nowrap">${effectSign}${Storage.formatCurrency(Math.abs(effect))}</td>
-          <td style="text-align:right;white-space:nowrap">${Storage.formatCurrency(running)}</td>
+          <td class="${effectClass}" style="text-align:right;white-space:nowrap">
+            ${isDirect ? `${effectSign}${Storage.formatCurrency(Math.abs(effect))}` : `<span class="text-muted">${Storage.formatCurrency(t.amount)}</span>`}
+          </td>
+          <td style="text-align:right;white-space:nowrap">${saldoCell}</td>
         </tr>`;
     });
 
@@ -378,7 +407,7 @@ const Accounts = (() => {
           <div style="font-weight:700">${Storage.formatCurrency(a.initialBalance || 0)}</div>
         </div>
         <div class="stat-card-mini">
-          <div class="text-muted" style="font-size:.72rem">${txs.length} movimientos</div>
+          <div class="text-muted" style="font-size:.72rem">${directIds.size} mov. directos · ${relatedIds.size} cobros</div>
           <div style="font-weight:700">${Storage.formatCurrency(Storage.getTxEffect(id, a.type))}</div>
         </div>
         <div class="stat-card-mini" style="border-color:${color}44">
@@ -399,7 +428,9 @@ const Accounts = (() => {
           </thead>
           <tbody>${rows.join('')}</tbody>
         </table>
-      </div>` : `<div class="empty-state"><i class="fas fa-receipt"></i><p>Sin movimientos registrados.</p></div>`}
+      </div>
+      <p class="text-muted" style="font-size:.72rem;margin-top:.75rem"><i class="fas fa-circle-info"></i> Las filas en gris son cobros recibidos en otra cuenta.</p>
+      ` : `<div class="empty-state"><i class="fas fa-receipt"></i><p>Sin movimientos registrados.</p></div>`}
     `);
   }
 
