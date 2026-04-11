@@ -73,7 +73,10 @@ const App = (() => {
       // Sincronizar con Supabase en background
       Storage.loadAll().then(() => {
         renderDashboard();
+        if (typeof Accounts !== 'undefined') Accounts.render();
         if (typeof Transactions !== 'undefined') Transactions._renderList?.();
+        if (typeof Installments !== 'undefined') Installments.render?.();
+        if (typeof Loans !== 'undefined') Loans.render?.();
       }).catch(err => console.warn('[App] Sync background error:', err));
       // Mostrar email
       Storage.getUser().then(user => {
