@@ -81,6 +81,9 @@ const Accounts = (() => {
         </div>
         ${extra}
         <div class="account-actions" onclick="event.stopPropagation()">
+          <button class="btn-icon" onclick="Accounts.openDetailModal('${a.id}')" title="Ver movimientos">
+            <i class="fas fa-list-ul"></i>
+          </button>
           <button class="btn-icon" onclick="Accounts.openEditModal('${a.id}')" title="Editar">
             <i class="fas fa-pen"></i>
           </button>
@@ -322,11 +325,89 @@ const Accounts = (() => {
     return a ? a.name : 'Cuenta eliminada';
   }
 
+  /* ─── Modal: Detalle de movimientos de la cuenta ─── */
+  function openDetailModal(id) {
+    const a = Storage.getAccounts().find(x => x.id === id);
+    if (!a) return;
+    const isCredit = a.type === 'credit';
+    const color = a.color || '#7c3aed';
+
+    const txs = Storage.getTransactions()
+      .filter(t => t.accountId === id || t.toAccountId === id)
+      .sort((x, y) => (x.date || '').localeCompare(y.date || '') || (x.id || '').localeCompare(y.id || ''));
+
+    // Calcular efecto acumulado por transacción
+    let running = a.initialBalance || 0;
+    const rows = txs.map(t => {
+      const src = t.accountId === id;
+      let effect = 0;
+      if (src) {
+        if (t.type === 'income')   effect = isCredit ? -t.amount :  t.amount;
+        if (t.type === 'expense')  effect = isCredit ?  t.amount : -t.amount;
+        if (t.type === 'transfer') effect = isCredit ?  t.amount : -t.amount;
+      } else {
+        // dst de transferencia
+        effect = isCredit ? -t.amount : t.amount;
+      }
+      running = Math.round((running + effect) * 100) / 100;
+
+      const typeIcon = t.type === 'income' ? 'fa-arrow-down' : t.type === 'expense' ? 'fa-arrow-up' : 'fa-arrows-left-right';
+      const effectClass = effect > 0 ? (isCredit ? 'text-danger' : 'text-success') : (isCredit ? 'text-success' : 'text-danger');
+      const effectSign = effect >= 0 ? '+' : '';
+      const label = t.isLoan ? 'Préstamo' : t.isLoanPayment ? 'Cobro' : t.isDebt ? 'Plazo' : (t.description || Storage.typeLabel(t.type));
+
+      return `
+        <tr class="acc-detail-row">
+          <td class="text-muted" style="white-space:nowrap">${Storage.formatDate(t.date)}</td>
+          <td>
+            <i class="fas ${typeIcon}" style="font-size:.7rem;margin-right:.3rem;opacity:.6"></i>
+            ${_esc(label)}
+            ${t.category ? `<span class="tx-category" style="margin-left:.35rem">${_esc(t.category)}</span>` : ''}
+          </td>
+          <td class="${effectClass}" style="text-align:right;white-space:nowrap">${effectSign}${Storage.formatCurrency(Math.abs(effect))}</td>
+          <td style="text-align:right;white-space:nowrap">${Storage.formatCurrency(running)}</td>
+        </tr>`;
+    });
+
+    const finalBalance = a.balance ?? running;
+
+    App.openModal(`Movimientos · ${_esc(a.name)}`, `
+      <div class="acc-detail-summary" style="display:grid;grid-template-columns:repeat(3,1fr);gap:.75rem;margin-bottom:1.25rem">
+        <div class="stat-card-mini">
+          <div class="text-muted" style="font-size:.72rem">Saldo inicial</div>
+          <div style="font-weight:700">${Storage.formatCurrency(a.initialBalance || 0)}</div>
+        </div>
+        <div class="stat-card-mini">
+          <div class="text-muted" style="font-size:.72rem">${txs.length} movimientos</div>
+          <div style="font-weight:700">${Storage.formatCurrency(Storage.getTxEffect(id, a.type))}</div>
+        </div>
+        <div class="stat-card-mini" style="border-color:${color}44">
+          <div class="text-muted" style="font-size:.72rem">Saldo actual</div>
+          <div style="font-weight:700;color:${color}">${Storage.formatCurrency(finalBalance)}</div>
+        </div>
+      </div>
+      ${rows.length ? `
+      <div style="overflow-x:auto">
+        <table class="acc-detail-table">
+          <thead>
+            <tr>
+              <th>Fecha</th>
+              <th>Descripción</th>
+              <th style="text-align:right">Efecto</th>
+              <th style="text-align:right">Saldo</th>
+            </tr>
+          </thead>
+          <tbody>${rows.join('')}</tbody>
+        </table>
+      </div>` : `<div class="empty-state"><i class="fas fa-receipt"></i><p>Sin movimientos registrados.</p></div>`}
+    `);
+  }
+
   function _esc(str) {
     return String(str || '').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   }
 
   // Expose _onTypeChange globally for inline onchange
-  window.Accounts = { render, openAddModal, openEditModal, _onTypeChange, deleteAccount, getSummary, buildOptions, buildAllOptions, getById, getName };
+  window.Accounts = { render, openAddModal, openEditModal, openDetailModal, _onTypeChange, deleteAccount, getSummary, buildOptions, buildAllOptions, getById, getName };
   return window.Accounts;
 })();
