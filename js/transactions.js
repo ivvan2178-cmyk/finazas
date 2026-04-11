@@ -50,7 +50,8 @@ const Transactions = (() => {
     const f = _currentFilters;
 
     if (f.month && f.month !== 'all') txs = txs.filter(t => (t.date || '').startsWith(f.month));
-    if (f.type !== 'all') txs = txs.filter(t => t.type === f.type);
+    if (f.type === 'loan') txs = txs.filter(t => t.isLoan || t.isLoanPayment);
+    else if (f.type !== 'all') txs = txs.filter(t => t.type === f.type);
     if (f.account !== 'all') txs = txs.filter(t => t.accountId === f.account || t.toAccountId === f.account);
     if (f.category !== 'all') txs = txs.filter(t => t.category === f.category);
     if (f.search) {
@@ -60,10 +61,11 @@ const Transactions = (() => {
 
     txs.sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.id || '').localeCompare(a.id || ''));
 
-    // Totals
-    const totalIncome = txs.filter(t=>t.type==='income').reduce((s,t)=>s+t.amount,0);
-    const totalExpense = txs.filter(t=>t.type==='expense').reduce((s,t)=>s+t.amount,0);
+    // Totals (cobros de préstamos no cuentan como ingreso presupuestal)
+    const totalIncome   = txs.filter(t=>t.type==='income' && !t.isLoanPayment && !t.isLoan).reduce((s,t)=>s+t.amount,0);
+    const totalExpense  = txs.filter(t=>t.type==='expense' && !t.skipBudget).reduce((s,t)=>s+t.amount,0);
     const totalTransfer = txs.filter(t=>t.type==='transfer').reduce((s,t)=>s+t.amount,0);
+    const totalLoans    = txs.filter(t=>t.isLoan || t.isLoanPayment).reduce((s,t)=>s+t.amount,0);
 
     const summary = document.getElementById('tx-summary');
     if (summary) {
@@ -71,6 +73,7 @@ const Transactions = (() => {
         <div class="stat-pill income"><i class="fas fa-arrow-down"></i> ${Storage.formatCurrency(totalIncome)}</div>
         <div class="stat-pill expense"><i class="fas fa-arrow-up"></i> ${Storage.formatCurrency(totalExpense)}</div>
         <div class="stat-pill transfer"><i class="fas fa-arrows-left-right"></i> ${Storage.formatCurrency(totalTransfer)}</div>
+        ${totalLoans ? `<div class="stat-pill loan"><i class="fas fa-handshake"></i> ${Storage.formatCurrency(totalLoans)}</div>` : ''}
         <div class="stat-pill neutral"><i class="fas fa-list"></i> ${txs.length} movimientos</div>
       `;
     }
@@ -339,11 +342,40 @@ const Transactions = (() => {
   function deleteTransaction(id) {
     if (!confirm('¿Eliminar este movimiento?')) return;
     const transactions = Storage.getTransactions();
-    if (!transactions.find(x => x.id === id)) return;
+    const tx = transactions.find(x => x.id === id);
+    if (!tx) return;
+
+    // Si es un cobro de préstamo, quitar el pago del arreglo del préstamo
+    if (tx.isLoanPayment || (tx.category === 'Préstamos' && tx.type === 'income')) {
+      const loans = Storage.getLoans();
+      // Buscar el préstamo cuyo personName aparece en la descripción
+      const loan = loans.find(l => (tx.description || '').includes(l.personName));
+      if (loan) {
+        const realPays = (loan.payments || []).filter(p => !p._plan);
+        // Encontrar el pago que coincida en monto y fecha
+        const matchIdx = realPays.findIndex(p => Math.abs(p.amount - tx.amount) < 0.01 && p.date === tx.date);
+        if (matchIdx !== -1) {
+          const payId = realPays[matchIdx].id;
+          const loanIdx = loans.findIndex(l => l.id === loan.id);
+          loans[loanIdx].payments = (loans[loanIdx].payments || []).filter(p => p.id !== payId);
+          Storage.saveLoans(loans);
+        }
+      }
+    }
+
     Storage.saveTransactions(transactions.filter(x => x.id !== id));
     App.toast('Movimiento eliminado', 'success');
     _renderList();
     App.renderDashboard();
+
+    // Si era pago de plazo, refrescar plazos
+    if (tx.installmentId && typeof Installments !== 'undefined') {
+      Installments.render();
+    }
+    // Si era cobro de préstamo, refrescar préstamos
+    if ((tx.isLoanPayment || (tx.category === 'Préstamos' && tx.type === 'income')) && typeof Loans !== 'undefined') {
+      Loans.render();
+    }
   }
 
   /* ─── Recent transactions for dashboard ─── */
