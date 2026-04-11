@@ -127,7 +127,7 @@ const Transactions = (() => {
     }
 
     // Cobro de préstamo
-    if (t.isLoanPayment) {
+    if (t.isLoanPayment || (t.category === 'Préstamos' && t.type === 'income')) {
       return `
         <div class="tx-item tx-item-loan" onclick="Transactions.openEditModal('${t.id}')" style="cursor:pointer">
           <div class="tx-icon" style="background:rgba(14,165,233,.12);color:#38bdf8">
