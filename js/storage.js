@@ -578,6 +578,26 @@ const Storage = (() => {
     if (error) throw error;
   }
 
+  /* ── Fuerza re-subir todo el caché local a Supabase ── */
+  async function forceSync() {
+    const results = { ok: [], fail: [] };
+
+    const tryUpsert = async (table, data, packFn) => {
+      if (!data.length) return;
+      const rows = packFn ? data.map(packFn) : data;
+      const { error } = await _db.from(table).upsert(rows);
+      if (error) results.fail.push(`${table}: ${error.message}`);
+      else results.ok.push(table);
+    };
+
+    await tryUpsert('accounts',     _cache.accounts,     _packAccount);
+    await tryUpsert('transactions', _cache.transactions, _packTx);
+    await tryUpsert('installments', _cache.installments, _packInst);
+    await tryUpsert('loans',        _cache.loans,        null);
+
+    return results;
+  }
+
   async function signOut() {
     const { error } = await _db.auth.signOut();
     if (error) throw error;
@@ -599,7 +619,7 @@ const Storage = (() => {
 
   /* ── Expose ── */
   return {
-    setup, loadAll, loadFromLocalCache: _loadFromLocalCache, isSyncing, migrateFromLocalStorage,
+    setup, loadAll, loadFromLocalCache: _loadFromLocalCache, isSyncing, migrateFromLocalStorage, forceSync,
     recomputeBalances, getTxEffect,
     signIn, signUp, signOut, getUser, getSession, onAuthStateChange,
     getAccounts, saveAccounts,

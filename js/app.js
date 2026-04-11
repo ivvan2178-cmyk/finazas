@@ -478,6 +478,23 @@ const App = (() => {
   }
 
   /* ─── Export / Import handlers ─── */
+  async function forceSync() {
+    const btn = document.getElementById('btn-force-sync');
+    if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Sincronizando...'; }
+    try {
+      const results = await Storage.forceSync();
+      if (results.fail.length) {
+        toast('Errores: ' + results.fail.join(' | '), 'error');
+      } else {
+        toast(`Sincronización completa: ${results.ok.join(', ')}`, 'success');
+      }
+    } catch (e) {
+      toast('Error al sincronizar: ' + e.message, 'error');
+    } finally {
+      if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-cloud-arrow-up"></i> Sincronizar ahora'; }
+    }
+  }
+
   function exportCSV() {
     const count = Storage.exportCSV();
     toast(`${count} transacciones exportadas`, 'success');
@@ -537,7 +554,7 @@ const App = (() => {
   window.App = {
     init, navigate, renderDashboard,
     openModal, closeModal, toast,
-    exportCSV, triggerImport, handleImport,
+    forceSync, exportCSV, triggerImport, handleImport,
     applyFilters, clearFilters, signOut
   };
   return window.App;

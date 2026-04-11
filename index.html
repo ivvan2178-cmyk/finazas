@@ -364,6 +364,16 @@
       <div class="export-stats" id="export-stats"></div>
 
       <div class="export-grid">
+        <!-- Force sync -->
+        <div class="export-card">
+          <div class="export-icon" style="background:rgba(124,58,237,.12);color:#a78bfa"><i class="fas fa-cloud-arrow-up"></i></div>
+          <h3>Sincronizar con Supabase</h3>
+          <p>Fuerza la re-subida de todos los datos locales a Supabase. Útil si los datos no se guardaron correctamente.</p>
+          <button class="btn btn-primary" id="btn-force-sync" onclick="App.forceSync()" style="width:100%;background:#7c3aed;border-color:#7c3aed">
+            <i class="fas fa-cloud-arrow-up"></i> Sincronizar ahora
+          </button>
+        </div>
+
         <!-- Export -->
         <div class="export-card">
           <div class="export-icon green"><i class="fas fa-file-csv"></i></div>
