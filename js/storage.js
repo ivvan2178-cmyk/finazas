@@ -583,11 +583,13 @@ const Storage = (() => {
     const results = { ok: [], fail: [] };
 
     const tryUpsert = async (table, data, packFn) => {
-      if (!data.length) return;
+      if (!data.length) { results.fail.push(`${table}: sin datos en caché`); return; }
       const rows = packFn ? data.map(packFn) : data;
-      const { error } = await _db.from(table).upsert(rows);
-      if (error) results.fail.push(`${table}: ${error.message}`);
-      else results.ok.push(table);
+      console.log(`[forceSync] ${table}: enviando ${rows.length} filas`, rows[0]);
+      const { data: inserted, error, status, statusText } = await _db.from(table).upsert(rows).select();
+      console.log(`[forceSync] ${table}: status=${status} ${statusText}`, error, inserted?.length);
+      if (error) results.fail.push(`${table}(${status}): ${error.message}`);
+      else results.ok.push(`${table}(${inserted?.length ?? '?'} filas)`);
     };
 
     await tryUpsert('accounts',     _cache.accounts,     _packAccount);
