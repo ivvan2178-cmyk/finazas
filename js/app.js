@@ -574,7 +574,7 @@ const App = (() => {
 
     const rows = creditAccounts.map(a => {
       const personalEffect = allTxs.reduce((sum, t) => {
-        if (t.category === 'Préstamos') return sum;
+        if (t.category === 'Préstamos' || t.category === 'Pago préstamo') return sum;
         const src = t.accountId === a.id;
         const dst = t.toAccountId === a.id;
         if (!src && !dst) return sum;
@@ -621,7 +621,7 @@ const App = (() => {
 
     const total = creditAccounts.reduce((s, a) => {
       const personalEffect = allTxs.reduce((sum, t) => {
-        if (t.category === 'Préstamos') return sum;
+        if (t.category === 'Préstamos' || t.category === 'Pago préstamo') return sum;
         const src = t.accountId === a.id, dst = t.toAccountId === a.id;
         if (!src && !dst) return sum;
         if (src) {

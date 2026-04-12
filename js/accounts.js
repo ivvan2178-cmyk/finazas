@@ -104,7 +104,8 @@ const Accounts = (() => {
       if (a.type === 'credit') {
         // Deuda personal: solo plazos + gastos directos, sin contar préstamos otorgados
         const personalEffect = allTxs.reduce((sum, t) => {
-          if (t.category === 'Préstamos') return sum;  // ignorar préstamos
+          if (t.category === 'Préstamos') return sum;   // ignorar préstamos otorgados
+          if (t.category === 'Pago préstamo') return sum; // ignorar pagos de deuda ajena
           const src = t.accountId === a.id;
           const dst = t.toAccountId === a.id;
           if (!src && !dst) return sum;
