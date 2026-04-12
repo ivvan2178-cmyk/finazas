@@ -340,7 +340,7 @@ const Storage = (() => {
     const isLoanPayment = !!(t.category === 'Préstamos' && t.type === 'income');
     const isInternalAbono = !!(t.installmentId && t.type === 'income');
     const skipBudget    = isDebt || isLoan || isLoanPayment || isInternalAbono;
-    return { ...t, isDebt, isLoan, isLoanPayment, skipBudget };
+    return { ...t, isDebt, isLoan, isLoanPayment, isInternalAbono, skipBudget };
   }
 
   // Deriva paidMonths y date del plazo a partir de las transacciones
