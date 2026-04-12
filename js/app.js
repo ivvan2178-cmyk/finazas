@@ -297,7 +297,20 @@ const App = (() => {
     const monthTxs = Transactions.getForMonth(currentMonth);
 
     const monthIncome = monthTxs.filter(t => t.type === 'income' && !t.skipBudget).reduce((s, t) => s + t.amount, 0);
-    const monthExpense = monthTxs.filter(t => t.type === 'expense' && !t.skipBudget).reduce((s, t) => s + t.amount, 0);
+
+    // Transferencias de cuentas de capital a TCs cuentan como gasto del mes,
+    // excepto las categorizadas como "Pago préstamo" (saldo deuda ajena)
+    const accounts = Storage.getAccounts();
+    const capitalIds = new Set(accounts.filter(a => a.type !== 'credit').map(a => a.id));
+    const creditIds  = new Set(accounts.filter(a => a.type === 'credit').map(a => a.id));
+    const transferToCC = monthTxs
+      .filter(t => t.type === 'transfer'
+        && t.category !== 'Pago préstamo'
+        && capitalIds.has(t.accountId)
+        && creditIds.has(t.toAccountId))
+      .reduce((s, t) => s + t.amount, 0);
+
+    const monthExpense = monthTxs.filter(t => t.type === 'expense' && !t.skipBudget).reduce((s, t) => s + t.amount, 0) + transferToCC;
 
     // Stat cards
     _setEl('db-assets', Storage.formatCurrency(summary.assets));
