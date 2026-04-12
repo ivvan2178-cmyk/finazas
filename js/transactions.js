@@ -45,8 +45,7 @@ const Transactions = (() => {
     const container = document.getElementById('transactions-list');
     if (!container) return;
 
-    // Mostrar todo excepto abonos internos (skipBudget sin etiqueta visible)
-    let txs = Storage.getTransactions().filter(t => !t.skipBudget || t.isDebt || t.isLoan || t.isLoanPayment);
+    let txs = Storage.getTransactions().filter(t => !t.skipBudget || t.isDebt || t.isLoan || t.isLoanPayment || t.isInternalAbono);
     const f = _currentFilters;
 
     if (f.month && f.month !== 'all') txs = txs.filter(t => (t.date || '').startsWith(f.month));
