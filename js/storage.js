@@ -10,6 +10,7 @@ const Storage = (() => {
 
   let _db = null;
   let _pending = 0;   // saves en vuelo
+  let _dirtyDuringLoad = false;  // hubo un save mientras loadAll() estaba en curso
 
   /* ─── Valores por defecto ─── */
   const DEFAULT_EXPENSE_CATS = [
@@ -121,6 +122,8 @@ const Storage = (() => {
 
   /** Carga todos los datos desde Supabase al caché. Async. */
   async function loadAll() {
+    _dirtyDuringLoad = false;   // reset al inicio del fetch
+
     const _timeout = new Promise((_, reject) =>
       setTimeout(() => reject(new Error('loadAll timeout')), 8000)
     );
@@ -147,6 +150,13 @@ const Storage = (() => {
     const authError = [e1, e2, e3, e4, e5].find(e => e && (e.status === 401 || e.message?.includes('JWT') || e.message?.includes('not authorized')));
     if (authError) throw authError;
     [e1, e2, e3, e4, e5].forEach(e => e && console.warn('[Storage] loadAll warning:', e.message));
+
+    // Si hubo un save mientras hacíamos el fetch, ignorar los datos de Supabase
+    // para no sobreescribir cambios locales (borrados, ediciones) con datos viejos.
+    if (_dirtyDuringLoad) {
+      console.warn('[Storage] loadAll: save ocurrió durante el fetch, ignorando datos de Supabase');
+      return;
+    }
 
     _cache.transactions = (transactions || []).map(_deriveTxFlags);
     _cache.installments = (installments || []).map(i => _deriveInstallmentData(i, _cache.transactions));
@@ -261,6 +271,7 @@ const Storage = (() => {
 
   /** Ejecuta fn() async; actualiza el indicador de sincronización */
   function _save(fn) {
+    _dirtyDuringLoad = true;   // marcar para que loadAll() no sobreescriba
     _pending++;
     _syncUI(true);
     fn()
