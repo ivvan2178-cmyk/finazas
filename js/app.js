@@ -601,6 +601,10 @@ const App = (() => {
       const pagos = allTxs
         .filter(t => t.accountId === a.id && t.type === 'income' && !t.isInternalAbono && !t.isLoanPayment)
         .reduce((s, t) => s + t.amount, 0);
+      // Transferencias desde cuentas de capital hacia esta TC (pagos de estado de cuenta)
+      const pagosTx = allTxs
+        .filter(t => t.toAccountId === a.id && t.type === 'transfer' && t.category !== 'Pago préstamo')
+        .reduce((s, t) => s + t.amount, 0);
 
       const color = a.color || '#ef4444';
       return `
@@ -614,7 +618,8 @@ const App = (() => {
             <span>Plazos adquiridos</span><span style="text-align:right;color:var(--red)">+${Storage.formatCurrency(plazos)}</span>
             <span>Abonos de plazos</span><span style="text-align:right;color:var(--green)">-${Storage.formatCurrency(abonos)}</span>
             <span>Gastos directos</span><span style="text-align:right;color:var(--red)">+${Storage.formatCurrency(gastos)}</span>
-            <span>Pagos recibidos</span><span style="text-align:right;color:var(--green)">-${Storage.formatCurrency(pagos)}</span>
+            ${pagos   ? `<span>Pagos (ingreso)</span><span style="text-align:right;color:var(--green)">-${Storage.formatCurrency(pagos)}</span>` : ''}
+            ${pagosTx ? `<span>Pagos (transferencia)</span><span style="text-align:right;color:var(--green)">-${Storage.formatCurrency(pagosTx)}</span>` : ''}
           </div>
         </div>`;
     });
