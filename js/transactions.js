@@ -206,7 +206,85 @@ const Transactions = (() => {
   function openEditModal(id) {
     const t = Storage.getTransactions().find(x => x.id === id);
     if (!t) return;
+    if (t.isLoanPayment || (t.category === 'Préstamos' && t.type === 'income')) {
+      _renderLoanPaymentModal(t);
+      return;
+    }
     _renderModal(t, t.type);
+  }
+
+  function _renderLoanPaymentModal(t) {
+    App.openModal('Editar cobro de préstamo', `
+      <div class="form-grid">
+        <div class="form-group">
+          <label>Fecha</label>
+          <input id="lp-date" type="date" class="form-input" value="${t.date}" required />
+        </div>
+        <div class="form-group">
+          <label>Monto (MXN)</label>
+          <input id="lp-amount" type="number" class="form-input" value="${t.amount}" min="0.01" step="0.01" required />
+        </div>
+        <div class="form-group" style="grid-column:1/-1">
+          <label>Cuenta donde se recibió</label>
+          <select id="lp-account" class="form-input">
+            ${Accounts.buildAllOptions(t.accountId, '')}
+          </select>
+        </div>
+        <div class="form-group" style="grid-column:1/-1">
+          <label>Descripción</label>
+          <input id="lp-description" type="text" class="form-input" value="${_esc(t.description)}" />
+        </div>
+        <div class="form-group" style="grid-column:1/-1">
+          <label>Nota</label>
+          <textarea id="lp-nota" class="form-input" rows="2">${_esc(t.nota)}</textarea>
+        </div>
+        <div class="form-actions" style="grid-column:1/-1">
+          <button type="button" class="btn btn-ghost" onclick="App.closeModal()">Cancelar</button>
+          <button type="button" class="btn btn-primary" onclick="Transactions._saveLoanPayment('${t.id}')">Actualizar</button>
+        </div>
+      </div>
+    `);
+  }
+
+  function _saveLoanPayment(txId) {
+    const date        = document.getElementById('lp-date').value;
+    const amount      = parseFloat(document.getElementById('lp-amount').value) || 0;
+    const accountId   = document.getElementById('lp-account').value;
+    const description = document.getElementById('lp-description').value.trim();
+    const nota        = document.getElementById('lp-nota').value.trim();
+
+    if (!date || !amount || !accountId) { App.toast('Completa los campos requeridos', 'error'); return; }
+
+    // Actualizar la transacción preservando sus flags
+    const txs = Storage.getTransactions();
+    const idx = txs.findIndex(x => x.id === txId);
+    if (idx === -1) return;
+    const old = txs[idx];
+    txs[idx] = { ...old, date, amount, accountId, description, nota };
+    Storage.saveTransactions(txs);
+
+    // Sincronizar el pago correspondiente en loans[]
+    const loans = Storage.getLoans();
+    const loan = loans.find(l => (old.description || '').includes(l.personName));
+    if (loan) {
+      const loanIdx = loans.findIndex(l => l.id === loan.id);
+      const payIdx = (loans[loanIdx].payments || []).findIndex(p =>
+        !p._plan && Math.abs(p.amount - old.amount) < 0.01 && p.date === old.date
+      );
+      if (payIdx !== -1) {
+        loans[loanIdx].payments[payIdx] = {
+          ...loans[loanIdx].payments[payIdx],
+          amount, date, toAccountId: accountId, note: nota
+        };
+        Storage.saveLoans(loans);
+      }
+    }
+
+    App.closeModal();
+    App.toast('Cobro actualizado', 'success');
+    _renderList();
+    App.renderDashboard();
+    if (typeof Loans !== 'undefined') Loans.render();
   }
 
   function _renderModal(t, activeType) {
@@ -394,7 +472,7 @@ const Transactions = (() => {
 
   window.Transactions = {
     render, openAddModal, openEditModal, deleteTransaction,
-    getRecent, getForMonth, _switchTab, _renderList
+    getRecent, getForMonth, _switchTab, _renderList, _saveLoanPayment
   };
   return window.Transactions;
 })();
