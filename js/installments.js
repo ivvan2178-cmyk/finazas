@@ -339,8 +339,13 @@ const Installments = (() => {
           const txs = Storage.getTransactions();
           txs.forEach(t => {
             if (t.installmentId !== id) return;
-            if (accountChanged) t.accountId = accountId;
-            // solo actualizar monto en la transacción inicial (el cargo total del plazo)
+            // Solo el cargo inicial (isDebt) y los abonos (isInternalAbono) pertenecen
+            // a la TC — los pagos mensuales (expense con categoría no Plazos/MSI)
+            // pertenecen a la cuenta de débito y no deben moverse.
+            const isTCTx = (t.type === 'expense' && t.category === 'Plazos / MSI') ||
+                           (t.type === 'income'  && t.category === 'Plazos / MSI');
+            if (accountChanged && isTCTx) t.accountId = accountId;
+            // Actualizar monto solo en el cargo inicial
             if (amountChanged && t.type === 'expense' && t.category === 'Plazos / MSI' && Math.abs(t.amount - oldTotal) < 0.01) {
               t.amount = totalAmount;
             }
