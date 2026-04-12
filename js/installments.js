@@ -328,18 +328,23 @@ const Installments = (() => {
       if (idx > -1) {
         const old = installments[idx];
         const oldTotal = old.totalAmount;
+        const oldAccountId = old.accountId;
         installments[idx] = { ...old, ...data };
 
-        // Si cambió el monto total, actualizar la transacción inicial y el saldo de la TC
-        if (Math.abs(totalAmount - oldTotal) > 0.001) {
+        // Si cambió el monto o la cuenta, actualizar las transacciones del plazo
+        const amountChanged  = Math.abs(totalAmount - oldTotal) > 0.001;
+        const accountChanged = accountId !== oldAccountId;
+
+        if (amountChanged || accountChanged) {
           const txs = Storage.getTransactions();
-          const initTx = txs.find(t =>
-            t.installmentId === id &&
-            t.type === 'expense' &&
-            t.category === 'Plazos / MSI' &&
-            Math.abs(t.amount - oldTotal) < 0.01
-          );
-          if (initTx) initTx.amount = totalAmount;
+          txs.forEach(t => {
+            if (t.installmentId !== id) return;
+            if (accountChanged) t.accountId = accountId;
+            // solo actualizar monto en la transacción inicial (el cargo total del plazo)
+            if (amountChanged && t.type === 'expense' && t.category === 'Plazos / MSI' && Math.abs(t.amount - oldTotal) < 0.01) {
+              t.amount = totalAmount;
+            }
+          });
           Storage.saveTransactions(txs); // recomputa saldos automáticamente
         }
       }
