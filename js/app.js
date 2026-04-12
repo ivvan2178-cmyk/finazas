@@ -567,8 +567,89 @@ const App = (() => {
     return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   }
 
+  function showDebtBreakdown() {
+    const accounts = Storage.getAccounts();
+    const allTxs   = Storage.getTransactions();
+    const creditAccounts = accounts.filter(a => a.type === 'credit');
+
+    const rows = creditAccounts.map(a => {
+      const personalEffect = allTxs.reduce((sum, t) => {
+        if (t.category === 'Préstamos') return sum;
+        const src = t.accountId === a.id;
+        const dst = t.toAccountId === a.id;
+        if (!src && !dst) return sum;
+        if (src) {
+          if (t.type === 'expense')  return sum + t.amount;
+          if (t.type === 'income')   return sum - t.amount;
+          if (t.type === 'transfer') return sum + t.amount;
+        }
+        if (dst && t.type === 'transfer') return sum - t.amount;
+        return sum;
+      }, 0);
+      const debt = Math.max(0, (a.initialBalance || 0) + personalEffect);
+
+      // Desglose: plazos pendientes, gastos directos
+      const plazos = allTxs
+        .filter(t => t.accountId === a.id && t.isDebt)
+        .reduce((s, t) => s + t.amount, 0);
+      const abonos = allTxs
+        .filter(t => t.accountId === a.id && t.isInternalAbono)
+        .reduce((s, t) => s + t.amount, 0);
+      const gastos = allTxs
+        .filter(t => t.accountId === a.id && t.type === 'expense' && !t.skipBudget)
+        .reduce((s, t) => s + t.amount, 0);
+      const pagos = allTxs
+        .filter(t => t.accountId === a.id && t.type === 'income' && !t.isInternalAbono && !t.isLoanPayment)
+        .reduce((s, t) => s + t.amount, 0);
+
+      const color = a.color || '#ef4444';
+      return `
+        <div style="border:1px solid ${color}33;border-radius:8px;padding:.85rem 1rem;margin-bottom:.75rem">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.6rem">
+            <span style="font-weight:600;color:${color}">${_esc(a.name)}</span>
+            <span style="font-weight:700;color:var(--red)">${Storage.formatCurrency(debt)}</span>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:.3rem .75rem;font-size:.8rem;color:var(--text-muted)">
+            <span>Saldo inicial</span><span style="text-align:right">${Storage.formatCurrency(a.initialBalance || 0)}</span>
+            <span>Plazos adquiridos</span><span style="text-align:right;color:var(--red)">+${Storage.formatCurrency(plazos)}</span>
+            <span>Abonos de plazos</span><span style="text-align:right;color:var(--green)">-${Storage.formatCurrency(abonos)}</span>
+            <span>Gastos directos</span><span style="text-align:right;color:var(--red)">+${Storage.formatCurrency(gastos)}</span>
+            <span>Pagos recibidos</span><span style="text-align:right;color:var(--green)">-${Storage.formatCurrency(pagos)}</span>
+          </div>
+        </div>`;
+    });
+
+    const total = creditAccounts.reduce((s, a) => {
+      const personalEffect = allTxs.reduce((sum, t) => {
+        if (t.category === 'Préstamos') return sum;
+        const src = t.accountId === a.id, dst = t.toAccountId === a.id;
+        if (!src && !dst) return sum;
+        if (src) {
+          if (t.type === 'expense')  return sum + t.amount;
+          if (t.type === 'income')   return sum - t.amount;
+          if (t.type === 'transfer') return sum + t.amount;
+        }
+        if (dst && t.type === 'transfer') return sum - t.amount;
+        return sum;
+      }, 0);
+      return s + Math.max(0, (a.initialBalance || 0) + personalEffect);
+    }, 0);
+
+    openModal('Desglose de deuda total', `
+      ${rows.join('')}
+      <div style="border-top:1px solid var(--border);padding-top:.75rem;display:flex;justify-content:space-between;font-weight:700">
+        <span>Total</span>
+        <span class="text-danger">${Storage.formatCurrency(total)}</span>
+      </div>
+      <p class="text-muted" style="font-size:.72rem;margin-top:.75rem">
+        <i class="fas fa-circle-info"></i> Los préstamos otorgados desde TCs no se incluyen en la deuda personal.
+      </p>
+      <div class="form-actions"><button class="btn btn-ghost" onclick="App.closeModal()">Cerrar</button></div>
+    `);
+  }
+
   window.App = {
-    init, navigate, renderDashboard,
+    init, navigate, renderDashboard, showDebtBreakdown,
     openModal, closeModal, toast,
     forceSync, exportCSV, triggerImport, handleImport,
     applyFilters, clearFilters, signOut
