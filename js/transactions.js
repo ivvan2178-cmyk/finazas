@@ -466,7 +466,8 @@ const Transactions = (() => {
     const amount = parseFloat(document.getElementById('tx-amount').value) || 0;
     const accountId = document.getElementById('tx-account').value;
     const toAccountId = type === 'transfer' ? document.getElementById('tx-toaccount').value : null;
-    const category = type !== 'transfer' ? document.getElementById('tx-category').value : '';
+    const catEl = document.getElementById('tx-category');
+    const category = catEl && catEl.closest('#tx-cat-group')?.style.display !== 'none' ? catEl.value : undefined;
     const description = document.getElementById('tx-description').value.trim();
     const nota = document.getElementById('tx-nota').value.trim();
 
@@ -476,13 +477,18 @@ const Transactions = (() => {
     }
 
     const transactions = Storage.getTransactions();
-    const txData = { type, date, amount, accountId, toAccountId, category, description, nota, installmentId: null };
+    const txData = { type, date, amount, accountId, toAccountId, description, nota };
+    if (category !== undefined) txData.category = category;
 
     if (idVal) {
       const idx = transactions.findIndex(x => x.id === idVal);
-      if (idx > -1) transactions[idx] = { ...transactions[idx], ...txData };
+      if (idx > -1) {
+        // Preservar installmentId y otros campos internos que no se editan aquí
+        transactions[idx] = { ...transactions[idx], ...txData };
+      }
     } else {
       txData.id = Storage.generateId();
+      txData.installmentId = null;
       transactions.push(txData);
     }
 
