@@ -206,11 +206,90 @@ const Transactions = (() => {
   function openEditModal(id) {
     const t = Storage.getTransactions().find(x => x.id === id);
     if (!t) return;
+    // Cobro de préstamo
     if (t.isLoanPayment || (t.category === 'Préstamos' && t.type === 'income')) {
-      _renderLoanPaymentModal(t);
-      return;
+      _renderLoanPaymentModal(t); return;
+    }
+    // Cargo inicial, abono o pago mensual de plazo
+    if (t.installmentId) {
+      _renderInstallmentTxModal(t); return;
     }
     _renderModal(t, t.type);
+  }
+
+  function _renderInstallmentTxModal(t) {
+    const isDebt   = t.isDebt;           // cargo inicial en TC
+    const isAbono  = t.isInternalAbono;  // abono que reduce deuda en TC
+    // pago mensual desde cuenta débito: ni isDebt ni isAbono
+
+    let title, hint;
+    if (isDebt)  { title = 'Cargo inicial de plazo';  hint = 'Edita el monto o fecha del cargo en la tarjeta.'; }
+    else if (isAbono) { title = 'Abono de plazo a TC'; hint = 'Edita el monto, fecha o cuenta donde se abona.'; }
+    else { title = 'Pago mensual de plazo'; hint = 'Edita el monto, fecha, cuenta o categoría del pago.'; }
+
+    App.openModal(title, `
+      <p class="text-muted" style="font-size:.82rem;margin-bottom:1rem"><i class="fas fa-circle-info"></i> ${hint}</p>
+      <div class="form-grid">
+        <div class="form-group">
+          <label>Fecha</label>
+          <input id="it-date" type="date" class="form-input" value="${t.date}" />
+        </div>
+        <div class="form-group">
+          <label>Monto (MXN)</label>
+          <input id="it-amount" type="number" class="form-input" value="${t.amount}" min="0.01" step="0.01" />
+        </div>
+        ${!isDebt && !isAbono ? `
+        <div class="form-group" style="grid-column:1/-1">
+          <label>Cuenta</label>
+          <select id="it-account" class="form-input">
+            ${Accounts.buildAllOptions(t.accountId, '')}
+          </select>
+        </div>
+        <div class="form-group" style="grid-column:1/-1">
+          <label>Categoría</label>
+          <select id="it-category" class="form-input">
+            ${Storage.getExpenseCategories().map(c => `<option value="${c}" ${c===t.category?'selected':''}>${c}</option>`).join('')}
+          </select>
+        </div>` : ''}
+        <div class="form-group" style="grid-column:1/-1">
+          <label>Nota</label>
+          <textarea id="it-nota" class="form-input" rows="2">${_esc(t.nota)}</textarea>
+        </div>
+        <div class="form-actions" style="grid-column:1/-1">
+          <button type="button" class="btn btn-ghost" onclick="App.closeModal()">Cancelar</button>
+          <button type="button" class="btn btn-primary" onclick="Transactions._saveInstallmentTx('${t.id}')">Actualizar</button>
+        </div>
+      </div>
+    `);
+  }
+
+  function _saveInstallmentTx(txId) {
+    const date   = document.getElementById('it-date').value;
+    const amount = parseFloat(document.getElementById('it-amount').value) || 0;
+    const nota   = document.getElementById('it-nota').value.trim();
+    const accountEl  = document.getElementById('it-account');
+    const categoryEl = document.getElementById('it-category');
+
+    if (!date || !amount) { App.toast('Completa los campos requeridos', 'error'); return; }
+
+    const txs = Storage.getTransactions();
+    const idx = txs.findIndex(x => x.id === txId);
+    if (idx === -1) return;
+
+    const old = txs[idx];
+    txs[idx] = {
+      ...old,
+      date, amount, nota,
+      accountId: accountEl  ? accountEl.value  : old.accountId,
+      category:  categoryEl ? categoryEl.value : old.category,
+    };
+    Storage.saveTransactions(txs);
+
+    App.closeModal();
+    App.toast('Movimiento actualizado', 'success');
+    _renderList();
+    App.renderDashboard();
+    if (typeof Installments !== 'undefined') Installments.render();
   }
 
   function _renderLoanPaymentModal(t) {
@@ -472,7 +551,7 @@ const Transactions = (() => {
 
   window.Transactions = {
     render, openAddModal, openEditModal, deleteTransaction,
-    getRecent, getForMonth, _switchTab, _renderList, _saveLoanPayment
+    getRecent, getForMonth, _switchTab, _renderList, _saveLoanPayment, _saveInstallmentTx
   };
   return window.Transactions;
 })();
