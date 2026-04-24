@@ -14,6 +14,8 @@ const Loans = (() => {
   function _pct(loan)      { return loan.amount > 0 ? Math.min(100, Math.round((_paid(loan) / loan.amount) * 100)) : 0; }
   function _done(loan)     { return _owed(loan) === 0; }
 
+  let _showArchived = false;
+
   /* ─── Render principal — agrupado por persona ─── */
   function render() {
     const el = document.getElementById('loans-content');
@@ -33,12 +35,22 @@ const Loans = (() => {
       byPerson[key].loans.push(l);
     });
 
-    // Personas con deuda pendiente primero
-    const groups = Object.values(byPerson).sort((a, b) => {
+    // Separar grupos activos (al menos un préstamo pendiente) de archivados (todos liquidados)
+    const allGroups = Object.values(byPerson).sort((a, b) => {
       const ao = a.loans.reduce((s,l) => s + _owed(l), 0);
       const bo = b.loans.reduce((s,l) => s + _owed(l), 0);
       return bo - ao;
     });
+    const activeGroups   = allGroups.filter(g => g.loans.some(l => !_done(l)));
+    const archivedGroups = allGroups.filter(g => g.loans.every(l =>  _done(l)));
+
+    const archivedSection = archivedGroups.length ? `
+      <div class="loans-archive-toggle" onclick="Loans._toggleArchived()">
+        <i class="fas fa-${_showArchived ? 'chevron-up' : 'chevron-down'}"></i>
+        ${_showArchived ? 'Ocultar archivados' : `Ver archivados (${archivedGroups.length})`}
+      </div>
+      ${_showArchived ? `<div class="loans-archived">${archivedGroups.map(_personSection).join('')}</div>` : ''}
+    ` : '';
 
     el.innerHTML = `
       <div class="loan-stats">
@@ -48,12 +60,14 @@ const Loans = (() => {
         <div class="loan-stat-box"><div class="lsb-label">Liquidados</div><div class="lsb-val text-success">${paidCount}</div></div>
       </div>
 
-      ${groups.length ? groups.map(_personSection).join('') : `
+      ${activeGroups.length ? activeGroups.map(_personSection).join('') : `
         <div class="empty-state">
           <i class="fas fa-handshake"></i>
-          <p>Sin préstamos registrados</p>
+          <p>${loans.length ? 'Todos los préstamos están liquidados' : 'Sin préstamos registrados'}</p>
           <span>Usa el botón de arriba para registrar un préstamo</span>
         </div>`}
+
+      ${archivedSection}
     `;
 
     // Event delegation
@@ -65,6 +79,11 @@ const Loans = (() => {
       btn.addEventListener('click', () => openEditModal(btn.dataset.editLoan)));
     el.querySelectorAll('[data-del-loan]').forEach(btn =>
       btn.addEventListener('click', () => _del(btn.dataset.delLoan)));
+  }
+
+  function _toggleArchived() {
+    _showArchived = !_showArchived;
+    render();
   }
 
   function _personSection(group) {
@@ -591,7 +610,7 @@ const Loans = (() => {
   window.Loans = {
     render, openAddModal, openEditModal, openPaymentModal, openDetailModal,
     _create, _update, _pay, _del, getTotalOwed,
-    _togglePlan, _calcLoanMonthly, _calcEditMonthly
+    _togglePlan, _calcLoanMonthly, _calcEditMonthly, _toggleArchived
   };
   return window.Loans;
 })();
