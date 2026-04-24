@@ -15,6 +15,7 @@ const Loans = (() => {
   function _done(loan)     { return _owed(loan) === 0; }
 
   let _showArchived = false;
+  const _expandedPersons = new Set();
 
   /* ─── Render principal — agrupado por persona ─── */
   function render() {
@@ -71,6 +72,8 @@ const Loans = (() => {
     `;
 
     // Event delegation
+    el.querySelectorAll('[data-toggle-person]').forEach(btn =>
+      btn.addEventListener('click', () => _togglePerson(btn.dataset.togglePerson)));
     el.querySelectorAll('[data-pay-loan]').forEach(btn =>
       btn.addEventListener('click', () => openPaymentModal(btn.dataset.payLoan)));
     el.querySelectorAll('[data-detail-loan]').forEach(btn =>
@@ -86,12 +89,23 @@ const Loans = (() => {
     render();
   }
 
+  function _togglePerson(key) {
+    if (_expandedPersons.has(key)) {
+      _expandedPersons.delete(key);
+    } else {
+      _expandedPersons.add(key);
+    }
+    render();
+  }
+
   function _personSection(group) {
+    const key      = (group.personName || '').toLowerCase().trim();
+    const expanded = _expandedPersons.has(key);
     const totalOwed = group.loans.reduce((s,l) => s + _owed(l), 0);
     const count = group.loans.length;
     return `
       <div class="loan-person-group">
-        <div class="loan-person-header">
+        <div class="loan-person-header loan-person-toggle" data-toggle-person="${esc(key)}">
           <div class="loan-avatar">${esc(group.personName.charAt(0).toUpperCase())}</div>
           <div class="loan-person-header-info">
             <div class="loan-person-name">${esc(group.personName)}</div>
@@ -103,10 +117,9 @@ const Loans = (() => {
                 : '<span class="text-success">Liquidado</span>'}
             </div>
           </div>
+          <i class="fas fa-chevron-${expanded ? 'up' : 'down'} loan-chevron"></i>
         </div>
-        <div class="loan-person-cards">
-          ${group.loans.map(_card).join('')}
-        </div>
+        ${expanded ? `<div class="loan-person-cards">${group.loans.map(_card).join('')}</div>` : ''}
       </div>`;
   }
 
@@ -610,7 +623,7 @@ const Loans = (() => {
   window.Loans = {
     render, openAddModal, openEditModal, openPaymentModal, openDetailModal,
     _create, _update, _pay, _del, getTotalOwed,
-    _togglePlan, _calcLoanMonthly, _calcEditMonthly, _toggleArchived
+    _togglePlan, _calcLoanMonthly, _calcEditMonthly, _toggleArchived, _togglePerson
   };
   return window.Loans;
 })();

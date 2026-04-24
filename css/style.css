@@ -640,6 +640,9 @@ textarea.form-input { resize: vertical; min-height: 65px; }
 .loans-archive-toggle { display: flex; align-items: center; gap: .5rem; margin-top: 1.25rem; padding: .6rem .75rem; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); font-size: .78rem; color: var(--text-muted); cursor: pointer; transition: color var(--transition), border-color var(--transition); }
 .loans-archive-toggle:hover { color: var(--white); border-color: var(--border2); }
 .loans-archived { margin-top: .75rem; opacity: .7; }
+.loan-person-toggle { cursor: pointer; transition: background var(--transition); border-radius: var(--radius); padding: .5rem; margin: -.5rem; }
+.loan-person-toggle:hover { background: var(--surface2); }
+.loan-chevron { margin-left: auto; color: var(--text-muted); font-size: .72rem; flex-shrink: 0; }
 .loan-card-top { display: flex; align-items: flex-start; gap: .75rem; margin-bottom: .85rem; }
 .loan-avatar { width: 36px; height: 36px; border-radius: 9px; background: rgba(99,102,241,.15); color: var(--purple-lt); display: flex; align-items: center; justify-content: center; font-size: .85rem; font-weight: 700; flex-shrink: 0; }
 .loan-info { flex: 1; min-width: 0; }
