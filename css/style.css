@@ -417,6 +417,14 @@ nav { padding: .6rem 0; flex: 1; }
 .credit-controls select { min-width: 185px; }
 .statement-period-info { display: flex; flex-wrap: wrap; gap: .5rem 1.5rem; padding: .65rem 1rem; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 1rem; font-size: .78rem; color: var(--text-muted); }
 .statement-period-info span { display: flex; align-items: center; gap: .4rem; }
+.stmt-filters { display: flex; gap: .5rem; flex-wrap: wrap; margin-bottom: 1rem; }
+.stmt-filter-btn { padding: .35rem .85rem; border-radius: 99px; border: 1px solid var(--border2); background: transparent; color: var(--text-muted); font-size: .75rem; font-weight: 600; cursor: pointer; transition: all var(--transition); }
+.stmt-filter-btn:hover { border-color: var(--purple); color: var(--white); }
+.stmt-filter-btn.active { background: var(--purple); border-color: var(--purple); color: #fff; }
+.stmt-filter-count { opacity: .7; font-weight: 400; }
+.statement-icon-direct { background: rgba(239,68,68,.12); color: var(--red); }
+.statement-icon-msi    { background: rgba(99,102,241,.12); color: var(--purple-lt); }
+.statement-icon-loan   { background: rgba(234,179,8,.12); color: var(--yellow); }
 .statement-total-card {
   background: rgba(99,102,241,.07);
   border: 1px solid rgba(99,102,241,.18);

@@ -639,6 +639,10 @@ const Installments = (() => {
   }
 
   /* ─── Estado de Cuenta (tarjeta + mes) ─── */
+  let _statementFilter = 'all';
+
+  function _setStatementFilter(f) { _statementFilter = f; renderCreditStatement(); }
+
   function renderCreditStatement() {
     const container = document.getElementById('credit-statement');
     if (!container) return;
@@ -650,12 +654,12 @@ const Installments = (() => {
     }
 
     const selectedAccountId = document.getElementById('credit-account-select')?.value || creditAccounts[0].id;
-    const selectedMonth = document.getElementById('credit-month-select')?.value || Storage.getCurrentMonth();
-    const account = creditAccounts.find(a => a.id === selectedAccountId) || creditAccounts[0];
+    const selectedMonth     = document.getElementById('credit-month-select')?.value  || Storage.getCurrentMonth();
+    const account           = creditAccounts.find(a => a.id === selectedAccountId) || creditAccounts[0];
+    const period            = _getBillingPeriod(account, selectedMonth);
+    const paymentMonth      = period.paymentDue.slice(0, 7);
 
-    const period = _getBillingPeriod(account, selectedMonth);
-
-    // Gastos directos dentro del periodo de corte (excluir préstamos, se manejan aparte)
+    // ── Gastos directos (excluye préstamos) dentro del periodo de corte ──
     const directExpenses = Storage.getTransactions().filter(t =>
       t.type === 'expense' &&
       t.accountId === selectedAccountId &&
@@ -665,8 +669,7 @@ const Installments = (() => {
       t.category !== 'Préstamos'
     );
 
-    // Pagos a plazos MSI: usar el mes en que se paga (fecha límite de pago)
-    const paymentMonth = period.paymentDue.slice(0, 7);
+    // ── Plazos MSI: cuota que cae en el mes de pago ──
     const installmentPayments = Storage.getInstallments()
       .filter(i => i.accountId === selectedAccountId)
       .map(i => {
@@ -675,19 +678,63 @@ const Installments = (() => {
         const [iy, im] = i.startMonth.split('-').map(Number);
         const [py, pm] = paymentMonth.split('-').map(Number);
         const payNum = (py - iy) * 12 + (pm - im) + 1;
-        return { ...i, dueAmount: due, paymentNumber: payNum };
+        return { ...i, dueAmount: due, paymentNumber: payNum, sortDate: i.startMonth + '-01' };
       })
       .filter(Boolean);
 
-    // Préstamos hechos con esta tarjeta
-    const loanEntries = _getLoanEntriesForStatement(selectedAccountId, selectedMonth, period);
+    // ── Préstamos de esta tarjeta: cuota que cae en el mes de pago ──
+    const loanEntries = _getLoanEntriesForStatement(selectedAccountId, paymentMonth, period);
+
+    // ── Lista unificada ordenada por fecha desc ──
+    const allItems = [
+      ...directExpenses.map(t => ({
+        type: 'direct', date: t.date, amount: t.amount,
+        html: `<div class="statement-row">
+          <div class="statement-row-icon statement-icon-direct"><i class="fas fa-arrow-up"></i></div>
+          <div class="statement-row-info">
+            <div class="statement-row-name">${_esc(t.description || t.category || 'Gasto')}</div>
+            <div class="statement-row-meta">${Storage.formatDate(t.date)} &bull; ${_esc(t.category)}</div>
+            ${t.nota ? `<div class="tx-nota"><i class="fas fa-note-sticky"></i> ${_esc(t.nota)}</div>` : ''}
+          </div>
+          <div class="statement-row-amount text-danger">${Storage.formatCurrency(t.amount)}</div>
+        </div>`
+      })),
+      ...installmentPayments.map(i => ({
+        type: 'msi', date: i.sortDate, amount: i.dueAmount,
+        html: `<div class="statement-row">
+          <div class="statement-row-icon statement-icon-msi"><i class="fas fa-credit-card"></i></div>
+          <div class="statement-row-info">
+            <div class="statement-row-name">${_esc(i.description)}</div>
+            <div class="statement-row-meta">MSI &bull; Pago ${i.paymentNumber} de ${i.months}</div>
+            ${i.nota ? `<div class="tx-nota"><i class="fas fa-note-sticky"></i> ${_esc(i.nota)}</div>` : ''}
+          </div>
+          <div class="statement-row-amount text-danger">${Storage.formatCurrency(i.dueAmount)}</div>
+        </div>`
+      })),
+      ...loanEntries.map(e => ({
+        type: 'loan', date: e.sortDate, amount: e.amount,
+        html: `<div class="statement-row">
+          <div class="statement-row-icon statement-icon-loan"><i class="fas fa-hand-holding-dollar"></i></div>
+          <div class="statement-row-info">
+            <div class="statement-row-name">${_esc(e.label)}</div>
+            <div class="statement-row-meta">${_esc(e.meta)}</div>
+            ${e.loan.description ? `<div class="tx-nota"><i class="fas fa-note-sticky"></i> ${_esc(e.loan.description)}</div>` : ''}
+          </div>
+          <div class="statement-row-amount text-danger">${Storage.formatCurrency(e.amount)}</div>
+        </div>`
+      }))
+    ].sort((a, b) => b.date.localeCompare(a.date));
+
+    const filtered = _statementFilter === 'all' ? allItems : allItems.filter(i => i.type === _statementFilter);
 
     const totalDirect  = directExpenses.reduce((s, t) => s + t.amount, 0);
     const totalInstall = installmentPayments.reduce((s, i) => s + i.dueAmount, 0);
     const totalLoans   = loanEntries.reduce((s, e) => s + e.amount, 0);
     const grandTotal   = totalDirect + totalInstall + totalLoans;
 
-    const empty = !installmentPayments.length && !directExpenses.length && !loanEntries.length;
+    const filterBtn = (id, label, count) => count === 0 ? '' :
+      `<button class="stmt-filter-btn ${_statementFilter === id ? 'active' : ''}"
+         onclick="Installments._setStatementFilter('${id}')">${label} <span class="stmt-filter-count">${count}</span></button>`;
 
     container.innerHTML = `
       <div class="statement-period-info">
@@ -696,69 +743,33 @@ const Installments = (() => {
       </div>
 
       <div class="statement-total-card">
-        <div class="statement-total-label">Total a pagar — ${Storage.formatMonth(period.paymentDue.slice(0, 7))}</div>
+        <div class="statement-total-label">Total a pagar — ${Storage.formatMonth(paymentMonth)}</div>
         <div class="statement-total-amount">${Storage.formatCurrency(grandTotal)}</div>
         <div class="statement-breakdown">
-          ${totalDirect  > 0 ? `<span>Gastos directos: <strong>${Storage.formatCurrency(totalDirect)}</strong></span>` : ''}
-          ${totalInstall > 0 ? `<span>Plazos MSI: <strong>${Storage.formatCurrency(totalInstall)}</strong></span>` : ''}
+          ${totalDirect  > 0 ? `<span>Gastos: <strong>${Storage.formatCurrency(totalDirect)}</strong></span>` : ''}
+          ${totalInstall > 0 ? `<span>MSI: <strong>${Storage.formatCurrency(totalInstall)}</strong></span>` : ''}
           ${totalLoans   > 0 ? `<span>Préstamos: <strong>${Storage.formatCurrency(totalLoans)}</strong></span>` : ''}
         </div>
       </div>
 
-      ${installmentPayments.length ? `
-        <h3 class="statement-section-title"><i class="fas fa-calendar-check"></i> Pagos a Plazos (MSI)</h3>
-        <div class="statement-list">
-          ${installmentPayments.map(i => `
-            <div class="statement-row">
-              <div class="statement-row-icon"><i class="fas fa-credit-card"></i></div>
-              <div class="statement-row-info">
-                <div class="statement-row-name">${_esc(i.description)}</div>
-                <div class="statement-row-meta">Pago ${i.paymentNumber} de ${i.months}</div>
-                ${i.nota ? `<div class="tx-nota"><i class="fas fa-note-sticky"></i> ${_esc(i.nota)}</div>` : ''}
-              </div>
-              <div class="statement-row-amount text-danger">${Storage.formatCurrency(i.dueAmount)}</div>
-            </div>`).join('')}
+      ${allItems.length ? `
+        <div class="stmt-filters">
+          ${filterBtn('all',    'Todos',      allItems.length)}
+          ${filterBtn('msi',   'MSI',         installmentPayments.length)}
+          ${filterBtn('loan',  'Préstamos',   loanEntries.length)}
+          ${filterBtn('direct','Gastos',      directExpenses.length)}
         </div>
-      ` : ''}
-
-      ${loanEntries.length ? `
-        <h3 class="statement-section-title"><i class="fas fa-handshake"></i> Préstamos</h3>
         <div class="statement-list">
-          ${loanEntries.map(e => `
-            <div class="statement-row">
-              <div class="statement-row-icon"><i class="fas fa-hand-holding-dollar"></i></div>
-              <div class="statement-row-info">
-                <div class="statement-row-name">${_esc(e.label)}</div>
-                <div class="statement-row-meta">${_esc(e.meta)}</div>
-                ${e.loan.description ? `<div class="tx-nota"><i class="fas fa-note-sticky"></i> ${_esc(e.loan.description)}</div>` : ''}
-              </div>
-              <div class="statement-row-amount text-danger">${Storage.formatCurrency(e.amount)}</div>
-            </div>`).join('')}
+          ${filtered.length
+            ? filtered.map(i => i.html).join('')
+            : `<p style="text-align:center;color:var(--text-muted);padding:1.5rem 0;font-size:.85rem">Sin resultados para este filtro</p>`}
         </div>
-      ` : ''}
-
-      ${directExpenses.length ? `
-        <h3 class="statement-section-title"><i class="fas fa-receipt"></i> Gastos Directos</h3>
-        <div class="statement-list">
-          ${directExpenses.map(t => `
-            <div class="statement-row">
-              <div class="statement-row-icon"><i class="fas fa-arrow-up"></i></div>
-              <div class="statement-row-info">
-                <div class="statement-row-name">${_esc(t.description || t.category || 'Gasto')}</div>
-                <div class="statement-row-meta">${Storage.formatDate(t.date)} &bull; ${_esc(t.category)}</div>
-                ${t.nota ? `<div class="tx-nota"><i class="fas fa-note-sticky"></i> ${_esc(t.nota)}</div>` : ''}
-              </div>
-              <div class="statement-row-amount text-danger">${Storage.formatCurrency(t.amount)}</div>
-            </div>`).join('')}
-        </div>
-      ` : ''}
-
-      ${empty ? `
+      ` : `
         <div class="empty-state" style="margin-top:2rem">
           <i class="fas fa-check-circle"></i>
-          <p>Sin movimientos en ${Storage.formatMonth(selectedMonth)}.</p>
+          <p>Sin movimientos en este periodo.</p>
         </div>
-      ` : ''}
+      `}
     `;
   }
 
@@ -795,7 +806,8 @@ const Installments = (() => {
     return { start: fmt(startDate), end: fmt(endDate), paymentDue: fmt(paymentDue) };
   }
 
-  function _getLoanEntriesForStatement(accountId, selectedMonth, period) {
+  // paymentMonth = mes en que se paga el estado de cuenta (corte + 20 días)
+  function _getLoanEntriesForStatement(accountId, paymentMonth, period) {
     const loans = Storage.getLoans().filter(l => l.fromAccountId === accountId);
     const entries = [];
 
@@ -803,14 +815,15 @@ const Installments = (() => {
       const plan = (loan.payments || []).find(p => p._plan) || null;
 
       if (plan) {
-        // Préstamo con plazos: mostrar solo la cuota del mes seleccionado
+        // Préstamo con plazos: mostrar la cuota que cae en el mes de pago
         const [sy, sm] = plan.startMonth.split('-').map(Number);
-        const [my, mm] = selectedMonth.split('-').map(Number);
-        const payIdx = (my - sy) * 12 + (mm - sm);
+        const [py, pm] = paymentMonth.split('-').map(Number);
+        const payIdx = (py - sy) * 12 + (pm - sm);
         if (payIdx >= 0 && payIdx < plan.months) {
           entries.push({
             loan,
             amount: plan.monthlyAmount,
+            sortDate: loan.date,
             label: `Préstamo a ${loan.personName}`,
             meta: `Plazo ${payIdx + 1} de ${plan.months} · ${Storage.formatDate(loan.date)}`
           });
@@ -822,6 +835,7 @@ const Installments = (() => {
           entries.push({
             loan,
             amount: _loanOwe(loan),
+            sortDate: refDate,
             label: `Préstamo a ${loan.personName}`,
             meta: loan.dueDate
               ? `Vence: ${Storage.formatDate(loan.dueDate)}`
@@ -874,7 +888,7 @@ const Installments = (() => {
     render, openAddModal, openEditModal, deleteInstallment,
     openPayModal, openScheduleModal, renderCreditStatement,
     getTotalDueThisMonth, getUpcomingInstallments,
-    _calcMonthly
+    _calcMonthly, _setStatementFilter
   };
   return window.Installments;
 })();
