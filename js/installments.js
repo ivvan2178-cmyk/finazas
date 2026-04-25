@@ -695,7 +695,7 @@ const Installments = (() => {
       </div>
 
       <div class="statement-total-card">
-        <div class="statement-total-label">Total a pagar — ${Storage.formatMonth(selectedMonth)}</div>
+        <div class="statement-total-label">Total a pagar — ${Storage.formatMonth(period.paymentDue.slice(0, 7))}</div>
         <div class="statement-total-amount">${Storage.formatCurrency(grandTotal)}</div>
         <div class="statement-breakdown">
           ${totalDirect  > 0 ? `<span>Gastos directos: <strong>${Storage.formatCurrency(totalDirect)}</strong></span>` : ''}
