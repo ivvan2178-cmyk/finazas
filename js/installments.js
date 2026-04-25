@@ -651,16 +651,21 @@ const Installments = (() => {
 
     const selectedAccountId = document.getElementById('credit-account-select')?.value || creditAccounts[0].id;
     const selectedMonth = document.getElementById('credit-month-select')?.value || Storage.getCurrentMonth();
+    const account = creditAccounts.find(a => a.id === selectedAccountId) || creditAccounts[0];
 
-    // Direct expenses on this card this month
+    const period = _getBillingPeriod(account, selectedMonth);
+
+    // Gastos directos dentro del periodo de corte (excluir préstamos, se manejan aparte)
     const directExpenses = Storage.getTransactions().filter(t =>
       t.type === 'expense' &&
       t.accountId === selectedAccountId &&
-      (t.date || '').startsWith(selectedMonth) &&
-      !t.installmentId
+      t.date >= period.start &&
+      t.date <= period.end &&
+      !t.installmentId &&
+      t.category !== 'Préstamos'
     );
 
-    // Installment payments due this month for this card
+    // Pagos a plazos MSI (basado en mes seleccionado, no en periodo de corte)
     const installmentPayments = Storage.getInstallments()
       .filter(i => i.accountId === selectedAccountId)
       .map(i => {
@@ -673,17 +678,29 @@ const Installments = (() => {
       })
       .filter(Boolean);
 
-    const totalDirect = directExpenses.reduce((s, t) => s + t.amount, 0);
+    // Préstamos hechos con esta tarjeta
+    const loanEntries = _getLoanEntriesForStatement(selectedAccountId, selectedMonth, period);
+
+    const totalDirect  = directExpenses.reduce((s, t) => s + t.amount, 0);
     const totalInstall = installmentPayments.reduce((s, i) => s + i.dueAmount, 0);
-    const grandTotal = totalDirect + totalInstall;
+    const totalLoans   = loanEntries.reduce((s, e) => s + e.amount, 0);
+    const grandTotal   = totalDirect + totalInstall + totalLoans;
+
+    const empty = !installmentPayments.length && !directExpenses.length && !loanEntries.length;
 
     container.innerHTML = `
+      <div class="statement-period-info">
+        <span><i class="fas fa-calendar-alt"></i> Periodo de corte: <strong>${Storage.formatDate(period.start)}</strong> — <strong>${Storage.formatDate(period.end)}</strong></span>
+        <span><i class="fas fa-clock"></i> Fecha límite de pago: <strong class="text-danger">${Storage.formatDate(period.paymentDue)}</strong></span>
+      </div>
+
       <div class="statement-total-card">
         <div class="statement-total-label">Total a pagar — ${Storage.formatMonth(selectedMonth)}</div>
         <div class="statement-total-amount">${Storage.formatCurrency(grandTotal)}</div>
         <div class="statement-breakdown">
-          <span>Gastos directos: <strong>${Storage.formatCurrency(totalDirect)}</strong></span>
-          <span>Plazos MSI: <strong>${Storage.formatCurrency(totalInstall)}</strong></span>
+          ${totalDirect  > 0 ? `<span>Gastos directos: <strong>${Storage.formatCurrency(totalDirect)}</strong></span>` : ''}
+          ${totalInstall > 0 ? `<span>Plazos MSI: <strong>${Storage.formatCurrency(totalInstall)}</strong></span>` : ''}
+          ${totalLoans   > 0 ? `<span>Préstamos: <strong>${Storage.formatCurrency(totalLoans)}</strong></span>` : ''}
         </div>
       </div>
 
@@ -699,6 +716,22 @@ const Installments = (() => {
                 ${i.nota ? `<div class="tx-nota"><i class="fas fa-note-sticky"></i> ${_esc(i.nota)}</div>` : ''}
               </div>
               <div class="statement-row-amount text-danger">${Storage.formatCurrency(i.dueAmount)}</div>
+            </div>`).join('')}
+        </div>
+      ` : ''}
+
+      ${loanEntries.length ? `
+        <h3 class="statement-section-title"><i class="fas fa-handshake"></i> Préstamos</h3>
+        <div class="statement-list">
+          ${loanEntries.map(e => `
+            <div class="statement-row">
+              <div class="statement-row-icon"><i class="fas fa-hand-holding-dollar"></i></div>
+              <div class="statement-row-info">
+                <div class="statement-row-name">${_esc(e.label)}</div>
+                <div class="statement-row-meta">${_esc(e.meta)}</div>
+                ${e.loan.description ? `<div class="tx-nota"><i class="fas fa-note-sticky"></i> ${_esc(e.loan.description)}</div>` : ''}
+              </div>
+              <div class="statement-row-amount text-danger">${Storage.formatCurrency(e.amount)}</div>
             </div>`).join('')}
         </div>
       ` : ''}
@@ -719,13 +752,90 @@ const Installments = (() => {
         </div>
       ` : ''}
 
-      ${!installmentPayments.length && !directExpenses.length ? `
+      ${empty ? `
         <div class="empty-state" style="margin-top:2rem">
           <i class="fas fa-check-circle"></i>
           <p>Sin movimientos en ${Storage.formatMonth(selectedMonth)}.</p>
         </div>
       ` : ''}
     `;
+  }
+
+  function _getBillingPeriod(account, selectedMonth) {
+    const cutoffDay = account.cutoffDay || 15;
+    const [y, m] = selectedMonth.split('-').map(Number);
+
+    // Fecha de corte: día de corte del mes seleccionado (ajustado al último día del mes si aplica)
+    const endDay = Math.min(cutoffDay, new Date(y, m, 0).getDate());
+    const endDate = new Date(y, m - 1, endDay);
+
+    // Inicio: día siguiente al corte del mes anterior
+    const prevY = m === 1 ? y - 1 : y;
+    const prevM = m === 1 ? 12 : m - 1;
+    const prevMaxDay = new Date(prevY, prevM, 0).getDate();
+    const startDay = Math.min(cutoffDay + 1, prevMaxDay + 1);
+    const startDate = startDay > prevMaxDay
+      ? new Date(y, m - 1, 1)              // desbordó: primer día del mes actual
+      : new Date(prevY, prevM - 1, startDay);
+
+    // Fecha límite de pago
+    const isPalacio = (account.name || '').toLowerCase().includes('palacio');
+    const paymentDue = isPalacio
+      ? new Date(endDate)
+      : new Date(endDate.getTime() + 20 * 24 * 60 * 60 * 1000);
+
+    const fmt = d => {
+      const yy = d.getFullYear();
+      const mm = String(d.getMonth() + 1).padStart(2, '0');
+      const dd = String(d.getDate()).padStart(2, '0');
+      return `${yy}-${mm}-${dd}`;
+    };
+
+    return { start: fmt(startDate), end: fmt(endDate), paymentDue: fmt(paymentDue) };
+  }
+
+  function _getLoanEntriesForStatement(accountId, selectedMonth, period) {
+    const loans = Storage.getLoans().filter(l => l.fromAccountId === accountId);
+    const entries = [];
+
+    loans.forEach(loan => {
+      const plan = (loan.payments || []).find(p => p._plan) || null;
+
+      if (plan) {
+        // Préstamo con plazos: mostrar solo la cuota del mes seleccionado
+        const [sy, sm] = plan.startMonth.split('-').map(Number);
+        const [my, mm] = selectedMonth.split('-').map(Number);
+        const payIdx = (my - sy) * 12 + (mm - sm);
+        if (payIdx >= 0 && payIdx < plan.months) {
+          entries.push({
+            loan,
+            amount: plan.monthlyAmount,
+            label: `Préstamo a ${loan.personName}`,
+            meta: `Plazo ${payIdx + 1} de ${plan.months} · ${Storage.formatDate(loan.date)}`
+          });
+        }
+      } else {
+        // Sin plazos: usar fecha límite si existe, si no la fecha del préstamo
+        const refDate = loan.dueDate || loan.date;
+        if (refDate >= period.start && refDate <= period.end) {
+          entries.push({
+            loan,
+            amount: _loanOwe(loan),
+            label: `Préstamo a ${loan.personName}`,
+            meta: loan.dueDate
+              ? `Vence: ${Storage.formatDate(loan.dueDate)}`
+              : `Fecha: ${Storage.formatDate(loan.date)}`
+          });
+        }
+      }
+    });
+
+    return entries;
+  }
+
+  function _loanOwe(loan) {
+    const paid = (loan.payments || []).filter(p => !p._plan).reduce((s, p) => s + p.amount, 0);
+    return Math.max(0, loan.amount - paid);
   }
 
   /* ─── Para el dashboard: total a pagar este mes en todas las tarjetas ─── */

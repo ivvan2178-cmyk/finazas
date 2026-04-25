@@ -415,6 +415,8 @@ nav { padding: .6rem 0; flex: 1; }
 /* ─── Credit Statement ─── */
 .credit-controls { display: flex; gap: .85rem; align-items: center; flex-wrap: wrap; margin-bottom: 1.25rem; }
 .credit-controls select { min-width: 185px; }
+.statement-period-info { display: flex; flex-wrap: wrap; gap: .5rem 1.5rem; padding: .65rem 1rem; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 1rem; font-size: .78rem; color: var(--text-muted); }
+.statement-period-info span { display: flex; align-items: center; gap: .4rem; }
 .statement-total-card {
   background: rgba(99,102,241,.07);
   border: 1px solid rgba(99,102,241,.18);
