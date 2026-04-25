@@ -9,7 +9,7 @@ const Budget = (() => {
     const container = document.getElementById('budget-content');
     if (!container) return;
 
-    const budgets = Storage.getBudgetForMonth(_currentMonth);
+    const budgets = Storage.getBudgetForMonth('global');
     const expenseCats = Storage.getExpenseCategories();
     const txs = Storage.getTransactions().filter(t =>
       t.type === 'expense' && (t.date || '').startsWith(_currentMonth) && !t.skipBudget
@@ -85,7 +85,7 @@ const Budget = (() => {
           <i class="fas fa-lightbulb"></i>
           <div>
             <strong>Configura tu presupuesto</strong>
-            <p>Haz clic en "Configurar límites" para establecer cuánto quieres gastar en cada categoría este mes.</p>
+            <p>Haz clic en "Configurar límites" para establecer cuánto quieres gastar en cada categoría. Aplica a todos los meses.</p>
           </div>
         </div>
       ` : ''}
@@ -132,12 +132,12 @@ const Budget = (() => {
 
   /* ─── Modal: Configurar límites ─── */
   function openConfigModal() {
-    const budgets = Storage.getBudgetForMonth(_currentMonth);
+    const budgets = Storage.getBudgetForMonth('global');
     const expenseCats = Storage.getExpenseCategories();
 
-    App.openModal(`Límites — ${Storage.formatMonth(_currentMonth)}`, `
+    App.openModal('Configurar presupuesto', `
       <p style="color:var(--text-muted);font-size:.83rem;margin-bottom:1.25rem;line-height:1.6">
-        Establece el monto máximo mensual para cada categoría. Deja en blanco para no establecer límite.
+        Establece el monto máximo mensual para cada categoría. Aplica a todos los meses. Deja en blanco para no establecer límite.
       </p>
       <div class="form-grid" style="max-height:420px;overflow-y:auto;padding-right:.25rem">
         ${expenseCats.map(cat => `
@@ -167,7 +167,7 @@ const Budget = (() => {
       const val = parseFloat(inp.value);
       if (!isNaN(val) && val > 0) limits[inp.dataset.cat] = val;
     });
-    Storage.saveBudgetForMonth(_currentMonth, limits);
+    Storage.saveBudgetForMonth('global', limits);
     App.closeModal();
     App.toast('Presupuesto guardado', 'success');
     render();
@@ -181,7 +181,7 @@ const Budget = (() => {
 
   function getAlerts() {
     // For dashboard: categories close to or over budget
-    const budgets = Storage.getBudgetForMonth(Storage.getCurrentMonth());
+    const budgets = Storage.getBudgetForMonth('global');
     const txs = Storage.getTransactions().filter(t =>
       t.type === 'expense' && (t.date || '').startsWith(Storage.getCurrentMonth())
     );
