@@ -665,15 +665,16 @@ const Installments = (() => {
       t.category !== 'Préstamos'
     );
 
-    // Pagos a plazos MSI (basado en mes seleccionado, no en periodo de corte)
+    // Pagos a plazos MSI: usar el mes en que se paga (fecha límite de pago)
+    const paymentMonth = period.paymentDue.slice(0, 7);
     const installmentPayments = Storage.getInstallments()
       .filter(i => i.accountId === selectedAccountId)
       .map(i => {
-        const due = _amountDueInMonth(i, selectedMonth);
+        const due = _amountDueInMonth(i, paymentMonth);
         if (due <= 0) return null;
         const [iy, im] = i.startMonth.split('-').map(Number);
-        const [my, mm] = selectedMonth.split('-').map(Number);
-        const payNum = (my - iy) * 12 + (mm - im) + 1;
+        const [py, pm] = paymentMonth.split('-').map(Number);
+        const payNum = (py - iy) * 12 + (pm - im) + 1;
         return { ...i, dueAmount: due, paymentNumber: payNum };
       })
       .filter(Boolean);
