@@ -829,12 +829,15 @@ const Installments = (() => {
           });
         }
       } else {
-        // Sin plazos: usar fecha límite si existe, si no la fecha del préstamo
+        // Sin plazos: usar fecha límite si existe, si no la fecha del préstamo.
+        // Se muestra si aún hay saldo pendiente de abonar a la TC (pagos recibidos
+        // en otras cuentas no reducen la deuda de la tarjeta).
         const refDate = loan.dueDate || loan.date;
-        if (refDate >= period.start && refDate <= period.end) {
+        const owedOnCard = _loanOweOnCard(loan, accountId);
+        if (owedOnCard > 0 && refDate >= period.start && refDate <= period.end) {
           entries.push({
             loan,
-            amount: _loanOwe(loan),
+            amount: owedOnCard,
             sortDate: refDate,
             label: `Préstamo a ${loan.personName}`,
             meta: loan.dueDate
@@ -850,6 +853,15 @@ const Installments = (() => {
 
   function _loanOwe(loan) {
     const paid = (loan.payments || []).filter(p => !p._plan).reduce((s, p) => s + p.amount, 0);
+    return Math.max(0, loan.amount - paid);
+  }
+
+  // Solo resta los pagos que llegaron a la propia tarjeta de crédito.
+  // Si el cobro se recibió en otra cuenta, la TC sigue debiendo ese monto.
+  function _loanOweOnCard(loan, accountId) {
+    const paid = (loan.payments || [])
+      .filter(p => !p._plan && p.toAccountId === accountId)
+      .reduce((s, p) => s + p.amount, 0);
     return Math.max(0, loan.amount - paid);
   }
 
