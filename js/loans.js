@@ -442,18 +442,16 @@ const Loans = (() => {
     // Actualizar la transacción de gasto original para reflejar los cambios en movimientos y saldos
     const oldPersonLower = (oldLoan.personName || '').toLowerCase();
     const txs = Storage.getTransactions();
-    const loanTxs = txs.filter(t => t.category === 'Préstamos' && t.type === 'expense');
-    console.log('[loans._update] txs de préstamo encontradas:', loanTxs.map(t => ({ desc: t.description, amount: t.amount, loanId: t.loanId })));
-    console.log('[loans._update] buscando por loanId:', loanId, '| por nombre:', oldPersonLower);
-    const txIdx = loanTxs.findIndex(t => t.loanId === loanId) !== -1
+    const txIdx = txs.findIndex(t => t.category === 'Préstamos' && t.type === 'expense' && t.loanId === loanId) !== -1
       ? txs.findIndex(t => t.category === 'Préstamos' && t.type === 'expense' && t.loanId === loanId)
       : txs.findIndex(t =>
           t.category === 'Préstamos' &&
           t.type === 'expense' &&
           (t.description || '').toLowerCase().includes(oldPersonLower)
         );
-    console.log('[loans._update] txIdx encontrado:', txIdx);
+    console.log('[loans._update] loanId:', loanId, '| nombre:', oldPersonLower, '| txIdx:', txIdx);
     if (txIdx !== -1) {
+      console.log('[loans._update] tx ANTES:', { id: txs[txIdx].id, desc: txs[txIdx].description, amount: txs[txIdx].amount, date: txs[txIdx].date });
       txs[txIdx] = {
         ...txs[txIdx],
         date,
@@ -462,7 +460,10 @@ const Loans = (() => {
         description: `Préstamo a ${personName}`,
         nota: description || note || ''
       };
+      console.log('[loans._update] tx DESPUÉS:', { desc: txs[txIdx].description, amount: txs[txIdx].amount, date: txs[txIdx].date });
       Storage.saveTransactions(txs);
+      const verificar = Storage.getTransactions().find(t => t.id === txs[txIdx].id);
+      console.log('[loans._update] verificación en cache:', verificar ? { desc: verificar.description, amount: verificar.amount } : 'NO ENCONTRADA');
     } else {
       App.toast('⚠ No se encontró la transacción original del préstamo', 'error');
     }
