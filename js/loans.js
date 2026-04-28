@@ -439,7 +439,8 @@ const Loans = (() => {
     loans[idx] = { ...oldLoan, personName, amount, fromAccountId, date, dueDate, description, note, payments };
     Storage.saveLoans(loans);
 
-    // Actualizar la transacción de gasto original para reflejar los cambios en movimientos y saldos
+    // Reemplazar la transacción original: eliminar la vieja e insertar una nueva con ID fresco
+    // Esto evita conflictos de IDs entre localStorage y Supabase que causaban duplicados
     const oldPersonLower = (oldLoan.personName || '').toLowerCase();
     const txs = Storage.getTransactions();
     const txIdx = txs.findIndex(t => t.category === 'Préstamos' && t.type === 'expense' && t.loanId === loanId) !== -1
@@ -449,23 +450,16 @@ const Loans = (() => {
           t.type === 'expense' &&
           (t.description || '').toLowerCase().includes(oldPersonLower)
         );
-    console.log('[loans._update] loanId:', loanId, '| nombre:', oldPersonLower, '| txIdx:', txIdx);
     if (txIdx !== -1) {
-      console.log('[loans._update] tx ANTES:', { id: txs[txIdx].id, desc: txs[txIdx].description, amount: txs[txIdx].amount, date: txs[txIdx].date });
-      txs[txIdx] = {
-        ...txs[txIdx],
-        date,
-        amount,
-        accountId: fromAccountId,
+      const oldTxId = txs[txIdx].id;
+      const newTxs = txs.filter(t => t.id !== oldTxId);
+      newTxs.push({
+        id: uid(), date, type: 'expense', category: 'Préstamos',
         description: `Préstamo a ${personName}`,
-        nota: description || note || ''
-      };
-      console.log('[loans._update] tx DESPUÉS:', { desc: txs[txIdx].description, amount: txs[txIdx].amount, date: txs[txIdx].date });
-      Storage.saveTransactions(txs);
-      const verificar = Storage.getTransactions().find(t => t.id === txs[txIdx].id);
-      console.log('[loans._update] verificación en cache:', verificar ? { desc: verificar.description, amount: verificar.amount } : 'NO ENCONTRADA');
-    } else {
-      App.toast('⚠ No se encontró la transacción original del préstamo', 'error');
+        nota: description || note || '',
+        amount, accountId: fromAccountId, toAccountId: null, installmentId: null
+      });
+      Storage.saveTransactions(newTxs);
     }
 
     App.closeModal();
