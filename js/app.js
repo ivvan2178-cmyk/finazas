@@ -72,6 +72,7 @@ const App = (() => {
       navigate('dashboard');
       // Sincronizar con Supabase en background
       Storage.loadAll().then(() => {
+        Storage.deduplicateLoanTransactions();
         renderDashboard();
         if (typeof Accounts !== 'undefined') Accounts.render();
         if (typeof Transactions !== 'undefined') Transactions._renderList?.();
@@ -91,6 +92,7 @@ const App = (() => {
 
     try {
       await Storage.loadAll();
+      Storage.deduplicateLoanTransactions();
       if (!localStorage.getItem('fz_migrated_v2')) {
         const count = await Storage.migrateFromLocalStorage();
         if (count > 0) console.info(`[Migration] ${count} registros migrados`);

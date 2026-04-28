@@ -412,6 +412,44 @@ const Storage = (() => {
     });
   }
 
+  // Elimina transacciones de préstamo duplicadas del cache y de Supabase.
+  // Mantiene la que coincide con el monto actual del préstamo; borra el resto.
+  // Debe llamarse después de que loadAll() haya terminado (IDs frescos de Supabase).
+  function deduplicateLoanTransactions() {
+    const toDelete = [];
+
+    // Agrupar transacciones de tipo "Préstamo a X" por descripción
+    const groups = {};
+    _cache.transactions.forEach(t => {
+      if (t.category === 'Préstamos' && t.type === 'expense') {
+        (groups[t.description] = groups[t.description] || []).push(t);
+      }
+    });
+
+    _cache.loans.forEach(loan => {
+      const desc = `Préstamo a ${loan.personName}`;
+      const group = groups[desc] || [];
+      if (group.length <= 1) return;
+
+      // Preferir la que coincide con el monto actual del préstamo
+      const best = group.find(t => Math.abs(t.amount - loan.amount) < 0.01)
+        || group.slice().sort((a, b) => (b.date || '').localeCompare(a.date || ''))[0];
+
+      group.filter(t => t.id !== best.id).forEach(t => toDelete.push(t.id));
+    });
+
+    if (!toDelete.length) return;
+
+    _cache.transactions = _cache.transactions.filter(t => !toDelete.includes(t.id));
+    _recomputeBalances();
+    _saveToLocalCache();
+    _save(async () => {
+      await _db.from('transactions').delete().in('id', toDelete);
+    });
+
+    console.info(`[Storage] deduplicateLoanTransactions: eliminadas ${toDelete.length} tx duplicadas`);
+  }
+
   // Actualiza una transacción de préstamo buscando por descripción exacta en lugar de por ID.
   // Esto evita duplicados cuando el ID del cache local no coincide con el ID en Supabase.
   function updateLoanTransaction(oldPersonName, { date, amount, accountId, description, nota }) {
@@ -659,7 +697,7 @@ const Storage = (() => {
     getAccounts, saveAccounts,
     getTransactions, saveTransactions,
     getInstallments, saveInstallments,
-    getLoans, saveLoans, updateLoanTransaction,
+    getLoans, saveLoans, updateLoanTransaction, deduplicateLoanTransactions,
     getExpenseCategories, saveExpenseCategories,
     getIncomeCategories, saveIncomeCategories,
     getBudgetForMonth, saveBudgetForMonth,
