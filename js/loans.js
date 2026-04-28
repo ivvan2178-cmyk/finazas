@@ -439,28 +439,13 @@ const Loans = (() => {
     loans[idx] = { ...oldLoan, personName, amount, fromAccountId, date, dueDate, description, note, payments };
     Storage.saveLoans(loans);
 
-    // Reemplazar la transacción original: eliminar la vieja e insertar una nueva con ID fresco
-    // Esto evita conflictos de IDs entre localStorage y Supabase que causaban duplicados
-    const oldPersonLower = (oldLoan.personName || '').toLowerCase();
-    const txs = Storage.getTransactions();
-    const txIdx = txs.findIndex(t => t.category === 'Préstamos' && t.type === 'expense' && t.loanId === loanId) !== -1
-      ? txs.findIndex(t => t.category === 'Préstamos' && t.type === 'expense' && t.loanId === loanId)
-      : txs.findIndex(t =>
-          t.category === 'Préstamos' &&
-          t.type === 'expense' &&
-          (t.description || '').toLowerCase().includes(oldPersonLower)
-        );
-    if (txIdx !== -1) {
-      const oldTxId = txs[txIdx].id;
-      const newTxs = txs.filter(t => t.id !== oldTxId);
-      newTxs.push({
-        id: uid(), date, type: 'expense', category: 'Préstamos',
-        description: `Préstamo a ${personName}`,
-        nota: description || note || '',
-        amount, accountId: fromAccountId, toAccountId: null, installmentId: null
-      });
-      Storage.saveTransactions(newTxs);
-    }
+    // Actualizar la transacción por descripción exacta — evita duplicados por mismatch de IDs
+    Storage.updateLoanTransaction(oldLoan.personName, {
+      date, amount,
+      accountId: fromAccountId,
+      description: `Préstamo a ${personName}`,
+      nota: description || note || ''
+    });
 
     App.closeModal();
     App.toast('Préstamo actualizado', 'success');

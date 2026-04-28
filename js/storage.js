@@ -412,6 +412,27 @@ const Storage = (() => {
     });
   }
 
+  // Actualiza una transacción de préstamo buscando por descripción exacta en lugar de por ID.
+  // Esto evita duplicados cuando el ID del cache local no coincide con el ID en Supabase.
+  function updateLoanTransaction(oldPersonName, { date, amount, accountId, description, nota }) {
+    const oldDesc = `Préstamo a ${oldPersonName}`;
+    _cache.transactions = _cache.transactions.map(t =>
+      (t.category === 'Préstamos' && t.type === 'expense' && t.description === oldDesc)
+        ? _deriveTxFlags({ ...t, date, amount, accountId, description, nota })
+        : t
+    );
+    _recomputeBalances();
+    _saveToLocalCache();
+    _save(async () => {
+      const { error } = await _db.from('transactions')
+        .update({ date, amount, accountId, description, nota })
+        .eq('category', 'Préstamos')
+        .eq('type', 'expense')
+        .eq('description', oldDesc);
+      if (error) throw error;
+    });
+  }
+
   /* ══════════════════════════════════════
      Categorías
   ══════════════════════════════════════ */
@@ -638,7 +659,7 @@ const Storage = (() => {
     getAccounts, saveAccounts,
     getTransactions, saveTransactions,
     getInstallments, saveInstallments,
-    getLoans, saveLoans,
+    getLoans, saveLoans, updateLoanTransaction,
     getExpenseCategories, saveExpenseCategories,
     getIncomeCategories, saveIncomeCategories,
     getBudgetForMonth, saveBudgetForMonth,
