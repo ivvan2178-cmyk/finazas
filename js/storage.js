@@ -412,58 +412,82 @@ const Storage = (() => {
     });
   }
 
-  // Elimina transacciones de préstamo duplicadas del cache y de Supabase.
-  // Solo borra cuando hay MÁS transacciones que préstamos para una persona.
-  // Asigna una transacción por préstamo eligiendo la de monto más cercano.
+  // Reconcilia transacciones de préstamo: elimina duplicados Y recrea faltantes.
+  // Garantiza exactamente una transacción de gasto por cada préstamo registrado.
   function deduplicateLoanTransactions() {
+    const _uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2);
     const toDelete = [];
+    const toAdd    = [];
 
-    // Agrupar txs de préstamo (expense) por descripción
-    const txGroups = {};
+    // Agrupar txs expense de Préstamos por descripción
+    const txsByDesc = {};
     _cache.transactions.forEach(t => {
       if (t.category === 'Préstamos' && t.type === 'expense') {
-        (txGroups[t.description] = txGroups[t.description] || []).push(t);
+        (txsByDesc[t.description] = txsByDesc[t.description] || []).push(t);
       }
     });
 
     // Agrupar préstamos por descripción esperada
-    const loanGroups = {};
+    const loansByDesc = {};
     _cache.loans.forEach(l => {
       const key = `Préstamo a ${l.personName}`;
-      (loanGroups[key] = loanGroups[key] || []).push(l);
+      (loansByDesc[key] = loansByDesc[key] || []).push(l);
     });
 
-    Object.entries(txGroups).forEach(([desc, txs]) => {
-      const loans = loanGroups[desc] || [];
-      // Sin préstamo asociado o sin exceso de txs: no tocar nada
-      if (loans.length === 0 || txs.length <= loans.length) return;
+    // Procesar cada grupo de préstamos
+    Object.entries(loansByDesc).forEach(([desc, loans]) => {
+      const txs = txsByDesc[desc] || [];
+      if (txs.length === loans.length) return; // Ya están balanceados
+
+      const usedTxIds      = new Set();
+      const matchedLoanIds = new Set();
 
       // Asignar cada préstamo a la tx de monto más cercano (greedy)
-      const usedIds = new Set();
       loans.forEach(loan => {
-        let bestId = null, bestDiff = Infinity;
+        let bestTx = null, bestDiff = Infinity;
         txs.forEach(t => {
-          if (usedIds.has(t.id)) return;
+          if (usedTxIds.has(t.id)) return;
           const diff = Math.abs(t.amount - loan.amount);
-          if (diff < bestDiff) { bestDiff = diff; bestId = t.id; }
+          if (diff < bestDiff) { bestDiff = diff; bestTx = t; }
         });
-        if (bestId) usedIds.add(bestId);
+        if (bestTx) { usedTxIds.add(bestTx.id); matchedLoanIds.add(loan.id); }
       });
 
-      // Las no asignadas son duplicados — eliminar
-      txs.filter(t => !usedIds.has(t.id)).forEach(t => toDelete.push(t.id));
+      // Txs sin préstamo asignado → duplicados, eliminar
+      txs.filter(t => !usedTxIds.has(t.id)).forEach(t => toDelete.push(t.id));
+
+      // Préstamos sin tx asignada → faltantes, crear
+      loans.filter(l => !matchedLoanIds.has(l.id)).forEach(loan => {
+        toAdd.push({
+          id: _uid(),
+          date: loan.date || new Date().toISOString().slice(0, 10),
+          type: 'expense', category: 'Préstamos',
+          description: desc,
+          nota: loan.description || loan.note || '',
+          amount: loan.amount,
+          accountId: loan.fromAccountId,
+          toAccountId: null, installmentId: null
+        });
+      });
     });
 
-    if (!toDelete.length) return;
+    if (!toDelete.length && !toAdd.length) return;
 
-    _cache.transactions = _cache.transactions.filter(t => !toDelete.includes(t.id));
+    let newTxs = _cache.transactions.filter(t => !toDelete.includes(t.id));
+    _cache.transactions = [...newTxs, ...toAdd].map(_deriveTxFlags);
     _recomputeBalances();
     _saveToLocalCache();
+
     _save(async () => {
-      await _db.from('transactions').delete().in('id', toDelete);
+      if (toDelete.length) await _db.from('transactions').delete().in('id', toDelete);
+      if (toAdd.length) {
+        const { error } = await _db.from('transactions').upsert(toAdd.map(_packTx));
+        if (error) throw error;
+      }
     });
 
-    console.info(`[Storage] deduplicateLoanTransactions: eliminadas ${toDelete.length} tx duplicadas`);
+    if (toDelete.length) console.info(`[Storage] reconcile préstamos: eliminadas ${toDelete.length} duplicadas`);
+    if (toAdd.length)    console.info(`[Storage] reconcile préstamos: creadas ${toAdd.length} faltantes`);
   }
 
   // Actualiza una transacción de préstamo buscando por descripción exacta en lugar de por ID.
