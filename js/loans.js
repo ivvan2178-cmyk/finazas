@@ -324,7 +324,7 @@ const Loans = (() => {
       description: `Préstamo a ${personName}`,
       nota: description || note || '',
       amount, accountId: fromAccountId, toAccountId: null,
-      installmentId: null
+      installmentId: null, loanId
     });
     Storage.saveTransactions(txs);
 
@@ -438,6 +438,34 @@ const Loans = (() => {
 
     loans[idx] = { ...oldLoan, personName, amount, fromAccountId, date, dueDate, description, note, payments };
     Storage.saveLoans(loans);
+
+    // Actualizar la transacción de gasto original para reflejar los cambios en movimientos y saldos
+    const oldPersonLower = (oldLoan.personName || '').toLowerCase();
+    const txs = Storage.getTransactions();
+    const loanTxs = txs.filter(t => t.category === 'Préstamos' && t.type === 'expense');
+    console.log('[loans._update] txs de préstamo encontradas:', loanTxs.map(t => ({ desc: t.description, amount: t.amount, loanId: t.loanId })));
+    console.log('[loans._update] buscando por loanId:', loanId, '| por nombre:', oldPersonLower);
+    const txIdx = loanTxs.findIndex(t => t.loanId === loanId) !== -1
+      ? txs.findIndex(t => t.category === 'Préstamos' && t.type === 'expense' && t.loanId === loanId)
+      : txs.findIndex(t =>
+          t.category === 'Préstamos' &&
+          t.type === 'expense' &&
+          (t.description || '').toLowerCase().includes(oldPersonLower)
+        );
+    console.log('[loans._update] txIdx encontrado:', txIdx);
+    if (txIdx !== -1) {
+      txs[txIdx] = {
+        ...txs[txIdx],
+        date,
+        amount,
+        accountId: fromAccountId,
+        description: `Préstamo a ${personName}`,
+        nota: description || note || ''
+      };
+      Storage.saveTransactions(txs);
+    } else {
+      App.toast('⚠ No se encontró la transacción original del préstamo', 'error');
+    }
 
     App.closeModal();
     App.toast('Préstamo actualizado', 'success');
