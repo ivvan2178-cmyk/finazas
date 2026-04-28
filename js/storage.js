@@ -413,29 +413,45 @@ const Storage = (() => {
   }
 
   // Elimina transacciones de préstamo duplicadas del cache y de Supabase.
-  // Mantiene la que coincide con el monto actual del préstamo; borra el resto.
-  // Debe llamarse después de que loadAll() haya terminado (IDs frescos de Supabase).
+  // Solo borra cuando hay MÁS transacciones que préstamos para una persona.
+  // Asigna una transacción por préstamo eligiendo la de monto más cercano.
   function deduplicateLoanTransactions() {
     const toDelete = [];
 
-    // Agrupar transacciones de tipo "Préstamo a X" por descripción
-    const groups = {};
+    // Agrupar txs de préstamo (expense) por descripción
+    const txGroups = {};
     _cache.transactions.forEach(t => {
       if (t.category === 'Préstamos' && t.type === 'expense') {
-        (groups[t.description] = groups[t.description] || []).push(t);
+        (txGroups[t.description] = txGroups[t.description] || []).push(t);
       }
     });
 
-    _cache.loans.forEach(loan => {
-      const desc = `Préstamo a ${loan.personName}`;
-      const group = groups[desc] || [];
-      if (group.length <= 1) return;
+    // Agrupar préstamos por descripción esperada
+    const loanGroups = {};
+    _cache.loans.forEach(l => {
+      const key = `Préstamo a ${l.personName}`;
+      (loanGroups[key] = loanGroups[key] || []).push(l);
+    });
 
-      // Preferir la que coincide con el monto actual del préstamo
-      const best = group.find(t => Math.abs(t.amount - loan.amount) < 0.01)
-        || group.slice().sort((a, b) => (b.date || '').localeCompare(a.date || ''))[0];
+    Object.entries(txGroups).forEach(([desc, txs]) => {
+      const loans = loanGroups[desc] || [];
+      // Sin préstamo asociado o sin exceso de txs: no tocar nada
+      if (loans.length === 0 || txs.length <= loans.length) return;
 
-      group.filter(t => t.id !== best.id).forEach(t => toDelete.push(t.id));
+      // Asignar cada préstamo a la tx de monto más cercano (greedy)
+      const usedIds = new Set();
+      loans.forEach(loan => {
+        let bestId = null, bestDiff = Infinity;
+        txs.forEach(t => {
+          if (usedIds.has(t.id)) return;
+          const diff = Math.abs(t.amount - loan.amount);
+          if (diff < bestDiff) { bestDiff = diff; bestId = t.id; }
+        });
+        if (bestId) usedIds.add(bestId);
+      });
+
+      // Las no asignadas son duplicados — eliminar
+      txs.filter(t => !usedIds.has(t.id)).forEach(t => toDelete.push(t.id));
     });
 
     if (!toDelete.length) return;
